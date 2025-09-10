@@ -1,0 +1,161 @@
+/* Toàn bộ form */
+.payment-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 400px;
+    margin: 50px auto;
+    padding: 30px;
+    background: linear-gradient(135deg, #d9e7ff, #f0f8ff, #e6f7ff);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Input và label */
+.payment-form label {
+    font-size: 16px;
+    color: #555;
+    display: block;
+}
+
+/* Input và label */
+.payment-form label:nth-child(1) {
+    margin-top: 10px;
+}
+
+
+/* Các trường input */
+.payment-form input {
+    width: 300px;
+    padding: 10px;
+    margin: 10px 0;
+    border: 2px solid #ddd;
+    background: none;
+    border-radius: 8px;
+    color: #333;
+    font-size: 16px;
+    transition: border-color 0.3s ease-in-out;
+}
+
+/* Hiệu ứng khi focus vào input */
+.payment-form input:focus {
+    border-color: #65a4e0;
+    outline: none;
+    box-shadow: 0 0 8px rgba(76, 139, 175, 0.4);
+}
+
+/* Nút thanh toán */
+.payment-form button {
+    width: 50%;
+    margin-top: 40px;
+    padding: 12px;
+    background-color: #5199d494;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+/* Hiệu ứng hover trên nút thanh toán */
+.payment-form button:hover {
+    background-color: #5199d4;
+}
+
+/* Hiệu ứng khi nút bị vô hiệu */
+.payment-form button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+/* Select ngân hàng */
+
+.payment-form select {
+    width: 319px;
+    padding: 10px;
+    margin: 10px 0;
+    border: 2px solid #ddd;
+    background: none;
+    border-radius: 8px;
+    color: #333;
+    font-size: 16px;
+    transition: border-color 0.3s ease-in-out;
+}
+
+/* Thông báo lỗi */
+.error-message {
+    margin-bottom: 15px;
+    font-size: 14px;
+    color: #ff4d4d;
+    background-color: #f8d7da;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid #f5c6cb;
+}
+
+.boxcard{
+    margin: 40px 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.boxcard img{
+    width: 40px;
+    height: 40px;
+}
+
+.jet{
+    background: #ff594df5;
+    border-radius: 5px;
+    padding: 5px;
+    text-align: center;
+    color: white;
+    font-size: 14px;
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+    .payment-form {
+        width: 90%;
+        max-width: 260px;
+        margin: 50px auto;
+        padding: 30px;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Input và label */
+    .payment-form label {
+        font-size: 16px;
+        color: #555;
+        display: block;
+    }
+    
+    /* Input và label */
+    .payment-form label:nth-child(1) {
+        margin-top: 10px;
+    }
+    
+    
+    /* Các trường input */
+    .payment-form input {
+        width: 250px;
+        padding: 10px;
+        margin: 10px 0;
+        border: 2px solid #ddd;
+        background: none;
+        border-radius: 8px;
+        color: #333;
+        font-size: 16px;
+        transition: border-color 0.3s ease-in-out;
+    }
+    
+}

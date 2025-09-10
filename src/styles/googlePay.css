@@ -1,0 +1,147 @@
+/* Submit : 23/12/2024 */
+/* Author : Nguyễn Hiệp */
+/* Version : 1.0.00 */
+/* Description : This is the css file for the google pay button and the payment container. */
+
+.payment-container-gg {
+  margin: 20px;
+  padding: 20px;
+  height: auto;
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  max-width: 400px;
+  background-color: #ffffff;
+  color: rgb(78, 76, 76);
+}
+
+.payment-container-gg h2 {
+  text-align: center;
+}
+
+.google-pay-button-gg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #4285f4, #34a853);
+  border: none;
+  border-radius: 8px;
+  padding: 12px 20px;
+  color: white;
+  font-size: 16px;
+  font-weight: bold;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.google-pay-button-gg:hover {
+  background: linear-gradient(135deg, #34a853, #4285f4);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+}
+
+.google-pay-button-gg:active {
+  transform: translateY(0);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.google-pay-button:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.transaction-details-gg {
+  margin-top: 20px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #fff;
+}
+
+.details-gg span {
+  margin: 0 15px;
+}
+
+.vertical-table-gg {
+  margin: 20px auto;
+  max-width: 400px;
+
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f9f9f9;
+}
+
+.vertical-table-gg table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vertical-table-gg th,
+.vertical-table-gg td {
+  padding: 12px 15px;
+  text-align: left;
+  border-radius: 10px;
+}
+
+.vertical-table-gg th {
+  background-color: #f0f0f0;
+  font-weight: bold;
+  width: 40%;
+}
+
+.vertical-table-gg tr:last-child td {
+  border-bottom: none;
+}
+
+.vertical-table-gg td {
+  background-color: #fff;
+}
+
+.vertical-table tr:hover td {
+  background-color: #f1f1f1;
+}
+
+h2 span:nth-child(1) {
+  color: #ff8383;
+  font-size: 40px;
+}
+
+p {
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  margin: 50px 0;
+  color: #333;
+}
+
+.loading-text-gg {
+  display: inline-block;
+  position: relative;
+  color: #a1a1a1;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 2px solid #000000;
+  animation: typing 3s steps(20) infinite, blink-caret 0.75s step-end infinite;
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 15ch;
+  }
+}
+
+@keyframes blink-caret {
+  from,
+  to {
+    border-color: transparent;
+  }
+  50% {
+    border-color: #e2e2e2;
+  }
+}
