@@ -1,10 +1,11 @@
 import { defineConfig } from "vite";
 import path from "path";
 import react from "@vitejs/plugin-react-swc";
+import { visualizer } from 'rollup-plugin-visualizer';
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), visualizer({ open: true, filename: 'bundle-analysis.html' })],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -13,10 +14,12 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "https://massage-therapy-production.up.railway.app", // Backend Spring Boot  http://192.168.1.177:5000
-        // target: 'https://localhost:5000',
+         target: 'https://localhost:8080',
+      },
+      "/ws": {
+        target: 'http://localhost:8080',
+        ws: true,
         changeOrigin: true,
-        secure: false,
       },
     },
   },

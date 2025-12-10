@@ -1,8 +1,8 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
-import translationVI from '../../public/locales/vi/translation.json';
-import translationEN from '../../public/locales/en/translation.json';
+import translationVI from '../assets/locales/vi/translation.json';
+import translationEN from '../assets/locales/en/translation.json';
 
 const resources = {
   vi: {

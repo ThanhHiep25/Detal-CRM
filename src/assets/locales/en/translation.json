@@ -1,0 +1,15 @@
+{
+  "login": "Login",
+  "register": "Register",
+  "password": "Password",
+  "fpassword": "Forgot Password ?",
+  "name": "Name",
+  "phone": "Phone Number",
+  "st": " Don't have an account? Sign up now",
+  "profile": "Profile",
+  "settings": "Settings",
+  "logout": "Logout",
+  "language": "Language",
+  "english": "English",
+  "vietnamese": "Vietnamese"
+}

@@ -1,243 +1,261 @@
-import { AccountCircleOutlined, LogoutOutlined, SettingsOutlined } from '@mui/icons-material';
-import { Avatar, Badge, styled } from '@mui/material';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/AuthContext';
-import { logout } from '../../service/apiAuth';
-import { Leaf } from 'lucide-react';
+import { AuthAPI, clearAuthTokens } from "@/services/auth";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "react-toastify";
+import AuthModal from "../auth/AuthForms";
+import { motion, AnimatePresence } from "framer-motion";
+import { CircleUser, LogOut, Settings2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import DentalInfoAPI from "@/services/dentalinfo";
+// import LanguageSwitcher from "../languageSwitcher/LanguageSwitcher";
 
+interface User {
+  name: string;
+  avatarUrl: string;
+}
 
 const Bar: React.FC = () => {
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [leaves, setLeaves] = useState<number[]>([]);
-    const { login, user, logoutContext } = useAuth();
-   // const { notifications, clearNotification } = useAppointmentNotifications();
-    //const [showDropdown, setShowDropdown] = useState(false);
 
-    const navigation = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [clinicName, setClinicName] = useState<string>('Nha Khoa');
+  const profileDropdownTimerRef = useRef<number | null>(null);
+  const { t } = useTranslation();
+  const router = useNavigate();
 
 
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setLeaves((prev) => {
-                if (prev.length >= 3) return prev.slice(1); 
-                return [...prev, Math.random()];
-            });
-        }, 2000); // Mỗi 2 giây có 1 lá rơi
-
-        return () => clearInterval(interval);
-    }, []);
-
-    const toggleMenu = () => {
-        setIsMenuOpen((prev) => !prev);
-    };
-
-    const handleLogin = () => {
-        navigation('/login');
-    };
-
-    const handleRegister = () => {
-        navigation('/register');
-    };
-
-    const handleProfile = () => {
-        navigation('/profile');
+  // Lấy dữ liệu người dùng từ localStorage khi component được mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) {
+        const userData = JSON.parse(stored);
+        setUser(
+          {
+            name: userData.username || userData.name || "User",
+            avatarUrl: userData.avatar_url || userData.avatarUrl || '/images/default-avatar.jpg'
+          }
+        )
+        setRole(userData.role || null);
+        setIsLoggedIn(true);
+      }
+    } catch (err) {
+      console.error("Error parsing user data from localStorage:", err);
+      toast.error("Dữ liệu người dùng không hợp lệ.",
+        {
+          position: "top-right",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          theme: "light",
+        }
+      );
     }
-    const handleSettings = () => {
-        navigation('/settings');
-    }
-    const handleLogout = async () => {
+  }, [])
+
+  // Lắng nghe sự kiện thay đổi localStorage để cập nhật trạng thái đăng nhập
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'user') {
         try {
-            await logout();
-            logoutContext();
-            setIsMenuOpen(false);
-
-        } catch (error: unknown) {
-            console.log('====================================');
-            if (error instanceof Error) {
-                const errorMessage = (error as { response?: { data?: { message?: string } } }).response?.data?.message || error.message;
-                console.log('Error:', errorMessage);
-            } else {
-                console.log('Unexpected error', error);
-            }
-            console.log('====================================');
+          const stored = e.newValue;
+          if (stored) {
+            const userData = JSON.parse(stored);
+            setUser(
+              {
+                name: userData.username || userData.name || "User",
+                avatarUrl: userData.avatar_url || userData.avatarUrl || '/images/default-avatar.jpg'
+              }
+            )
+            setRole(userData.role || null);
+            setIsLoggedIn(true);
+          } else {
+            setUser(null);
+            setRole(null);
+            setIsLoggedIn(false);
+          }
+        } catch (err) {
+          console.error("Error parsing user data from localStorage:", err);
         }
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+    }
+  }, [])
+
+  // Lấy tên phòng khám từ API
+  useEffect(() => {
+    const fetchClinicName = async () => {
+      try {
+        const response = await DentalInfoAPI.getAll();
+        if (response.success && response.data && response.data.length > 0) {
+          // Lấy tên của phòng khám đầu tiên hoặc phòng khám hoạt động
+          const activeClinic = response.data.find(clinic => clinic.active) || response.data[0];
+          if (activeClinic && activeClinic.name) {
+            setClinicName(activeClinic.name);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching clinic name:", err);
+      }
+    };
+    
+    fetchClinicName();
+  }, [])
+
+
+  const handleAuthSuccess = (userObj: { username?: string; email?: string; role?: string; avatar_url?: string;[k: string]: unknown }) => {
+    // Use the standardized format directly from AuthForms, don't convert to legacy format
+    const standardizedUser = {
+      username: userObj.username || '',
+      email: userObj.email || '',
+      role: userObj.role || 'USER',
+      avatar_url: userObj.avatar_url || '/images/default-avatar.jpg'
     };
 
-    useEffect(() => {
-        if (!user) {
-            const storedUser = localStorage.getItem("user");
-            if (storedUser) {
-                login(JSON.parse(storedUser)); // Khôi phục user từ localStorage
-            }
+    // Update local state for Menu display
+    setUser({
+      name: standardizedUser.username,
+      avatarUrl: standardizedUser.avatar_url
+    });
+    setRole(standardizedUser.role || null);
+    setIsLoggedIn(true);
+    try { localStorage.setItem('user', JSON.stringify(userObj)); } catch {
+      toast.error("Lỗi lưu dữ liệu người dùng.", {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "light",
+      });
+    }
+    setShowAuthModal(false);
+  };
+
+
+  const handleLogout = async () => {
+    setIsLoggedIn(false);
+    setUser(null);
+    setRole(null);
+    // reload the page to reset state
+    try { await AuthAPI.clearCookies(); } catch {
+      // Ignore errors during cookie clearing
+    }
+    try {
+      // Optionally call backend to invalidate session
+      const refreshToken = localStorage.getItem('refreshToken') || '';
+      if (refreshToken) {
+        try { await AuthAPI.logout({ refreshToken }); } catch {
+          // Ignore errors during logout
         }
-    }, [user, login]);
+      }
+      // Call backend to clear cookies
+    } catch {
+      toast.error(t('logoutFailed'), {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+        theme: "light",
+      });
+    }
+    clearAuthTokens();
+    window.location.reload();
+    localStorage.removeItem('currentPage');
+  };
 
-    const StyledBadge = styled(Badge)(({ theme }) => ({
-        '& .MuiBadge-badge': {
-            backgroundColor: '#44b700',
-            color: '#44b700',
-            boxShadow: `0 0 0 2px ${theme.palette.background.paper}`,
-            '&::after': {
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                borderRadius: '50%',
-                animation: 'ripple 1.2s infinite ease-in-out',
-                border: '1px solid currentColor',
-                content: '""',
-            },
-        },
-        '@keyframes ripple': {
-            '0%': {
-                transform: 'scale(.8)',
-                opacity: 1,
-            },
-            '100%': {
-                transform: 'scale(2.4)',
-                opacity: 0,
-            },
-        },
-    }));
+  const handleMouseEnterProfile = () => {
+    if (profileDropdownTimerRef.current) {
+      window.clearTimeout(profileDropdownTimerRef.current);
+      profileDropdownTimerRef.current = null;
+    }
+    setShowProfileDropdown(true);
+  };
 
-    return (
-        <div className="flex justify-between items-center  bg-white dark:bg-gray-800  text-gray-900 dark:text-white p-4" style={{
-            borderBottom: '1px solid #e5e7eb',
-        }}>
-            <>
-                {leaves.map((_, index) => (
-                    <div
-                        key={index}
-                        className="absolute text-yellow-500 opacity-80 animate-fall"
-                        style={{
-                            left: "0vw", // Bắt đầu từ góc trái
-                            top: "-5vh", // Bắt đầu từ trên màn hình
-                            animationDuration: `${4 + Math.random() * 20}s`, // Random tốc độ
-                            fontSize: `${12 + Math.random() * 20}px`,
-                            animationDelay: `${Math.random() * 2}s`, // Random độ trễ
-                        }}
-                    >
-                        <Leaf />
-                    </div>
-                ))}
-            </>
+  const handleMouseLeaveProfile = () => {
+    profileDropdownTimerRef.current = window.setTimeout(() => setShowProfileDropdown(false), 200) as unknown as number;
+  };
 
-            <div className="flex items-center justify-between sm:px-4 py-2 gap-3">
-                <img src="/tooth.png" alt="Tooth" className='w-[50px] h-[50px]' />
-                <p className='h-[50px] w-[2px] bg-black'></p>
-                <h1 className={`md:text-2xl text-lg bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 to-purple-500 font-bold`}><span className='md:text-[16px] text-sm'>Nha Khoa</span> <br/>Hoàng Bình 🍃</h1>
-            </div>
-            {!user ? (
-                <div className="flex space-x-4">
-                    <button
-                        onClick={handleLogin}
-                        className="sm:px-4 px-1 md:text-lg text-sm sm:py-2 p-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                        Đăng nhập
+
+  return (
+    <div className="flex md:flex-row  justify-between items-center  bg-white dark:bg-gray-800  text-gray-900 dark:text-white p-2" style={{
+      borderBottom: '1px solid #e5e7eb',
+    }}>
+
+      <div className="flex items-center justify-between sm:px-4 py-2 gap-3">
+        <img src="/tooth.png" alt="Tooth" className='md:w-[30px] md:h-[30px] w-8 h-8' />
+        <p className='h-[50px] w-[2px] bg-black'></p>
+        <h1 className={`md:text-2xl text-lg bg-clip-text text-transparent bg-gradient-to-r from-cyan-500 to-purple-500 font-bold`}><span className='md:text-[16px] text-sm'>Nha Khoa</span> <br />{clinicName} 🍃</h1>
+      </div>
+
+      <div className="flex md:flex-row flex-col items-center gap-4">
+        {isLoggedIn ? (
+          <div className="relative" onMouseEnter={handleMouseEnterProfile} onMouseLeave={handleMouseLeaveProfile}>
+            <button className="flex items-center gap-2 cursor-pointer">
+              <img src={user?.avatarUrl || '/images/default-avatar.jpg'} alt="User Avatar" className="rounded-full border-2 border-purple-500 w-12 h-12" />
+            </button>
+            <AnimatePresence>
+              {showProfileDropdown && (
+                <motion.div
+                  className="absolute top-full md:right-0 right-0 mt-2 bg-white shadow-lg rounded-md p-2 w-60 z-50 flex flex-col items-start"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.1 }}
+                >
+                  <div className="w-full py-2 px-4 text-sm font-semibold text-gray-800">
+                    {user?.name || "User"}
+                  </div>
+                  <div className="w-full  bg-gray-200 my-1" />
+                  <button onClick={() => { router('/profile'); setShowProfileDropdown(false); }} className="w-full flex items-center text-left text-sm text-gray-600 py-2 px-4 hover:bg-gray-100 rounded-md transition-colors duration-200">
+                    <CircleUser className="mr-2 text-gray-400" /> {t('profile') || 'Profile'}
+                  </button>
+                  <div className="w-full h-px bg-gray-200 my-1" />
+                  <button onClick={() => { router('/settings'); setShowProfileDropdown(false); }} className="w-full flex items-center text-left text-sm text-gray-600 py-2 px-4 hover:bg-gray-100 rounded-md transition-colors duration-200">
+                    <Settings2 className="mr-2 text-gray-400" /> {t('settings') || 'Settings'}
+                  </button>
+                  <div className="w-full h-px bg-gray-200 my-1" />
+                  {role === 'DENTIST' && (
+                    <button onClick={() => { router('/pages/dentist/appointments'); setShowProfileDropdown(false); }} className="w-full flex items-center text-left text-sm text-gray-600 py-2 px-4 hover:bg-gray-100 rounded-md transition-colors duration-200">
+                      {/* simple icon could be added here */}
+                      {t('my_appointments') || 'My Appointments'}
                     </button>
-                    <button
-                        onClick={handleRegister}
-                        className="sm:px-4 px-1 sm:py-2 p-3 md:text-lg text-[14px] bg-gray-500 text-white rounded hover:bg-gray-600"
-                    >
-                        Đăng ký
-                    </button>
-                </div>
-            ) : (
-                <div className='flex items-center'>
-                    {/* <IconButton
-                        size="large"
-                        aria-label="show new notifications"
-                        color="inherit"
-                        style={{ marginRight: '10px' }}
-                        onClick={() => setShowDropdown((prev) => !prev)}
-                    >
-                        <Badge badgeContent={notifications.length} color="error">
-                            <NotificationsActiveOutlined style={{ color: 'gray', fontSize: '28px' }} />
-                        </Badge>
-                    </IconButton>
-                    {showDropdown && notifications.length > 0 && (
-                        <div className="absolute right-16 top-16 bg-white shadow-lg rounded-md w-80 z-50 border">
-                            <div className="p-3 border-b font-semibold text-sm">Thông báo mới</div>
-                            <ul className="max-h-64 overflow-y-auto">
-                                {notifications.map((n) => (
-                                    <li
-                                        key={n.id}
-                                        className="px-4 py-2 text-sm hover:bg-gray-100 cursor-pointer"
-                                        onClick={() => {
-                                            clearNotification(n.id);
-                                            navigation(`/appointments?focus=${n.id}`);
-                                        }}
-                                    >
-                                        <p className="font-medium">
-                                            👤 {n.userId?.name || n.gustName || "Khách ẩn danh"}
-                                        </p>
-                                        <p className="text-gray-500 text-xs">
-                                            🕒 {new Date(n.appointmentDateTime).toLocaleString()}
-                                        </p>
-                                        <p className="text-gray-500 text-xs">
-                                            💅 {n.serviceIds.map((s) => s.name).join(", ")}
-                                        </p>
-                                    </li>
-                                ))}
-                                
-                            </ul>
-                        </div>
-                    )} */}
+                  )}
+                  <button onClick={handleLogout} className="w-full flex items-center text-left text-sm text-gray-600 py-2 px-4 hover:bg-gray-100 rounded-md transition-colors duration-200">
+                    <LogOut className="mr-2 text-gray-400" /> {t('logout') || 'Logout'}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : (
+          <motion.button onClick={() => setShowAuthModal(true)} whileTap={{ scale: 0.95 }}
+            className="md:text-lg font-bold text-white py-2 px-4 rounded-2xl text-sm bg-blue-600 hover:bg-blue-700 transition-colors duration-300">
+            {t('login')}
+          </motion.button>
+        )}
 
+        {/* <LanguageSwitcher /> */}
+      </div>
 
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} onSuccess={handleAuthSuccess} />
+    </div>
 
-                    <div className="relative">
-                        <div
-                            className="flex flex-col items-center cursor-pointer"
-                            onClick={toggleMenu}
-                        >
-                            <StyledBadge
-                                overlap="circular"
-                                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                                variant="dot"
-                            >
-                                <Avatar alt="Remy Sharp" src={user?.imageUrl} />
-                            </StyledBadge>
-                            <p className="mt-1 text-sm font-medium">{user?.name || 'Guest'}!</p>
-                        </div>
-
-                        {isMenuOpen && (
-                            <div
-                                className="absolute right-0 mt-2 w-44 bg-white rounded-md shadow-lg border"
-                                style={{
-                                    zIndex: 1000, // Đảm bảo dropdown nằm trên các phần tử khác
-                                }}
-                            >
-                                <ul className="py-2">
-                                    <li>
-                                        <button className="block px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 w-full" onClick={handleProfile}>
-                                            <AccountCircleOutlined /> Thông tin cá nhân
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button className="block px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 w-full" onClick={handleSettings}>
-                                            <SettingsOutlined /> Cài đặt
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button
-                                            className="block px-4 py-2 text-left text-sm text-red-600 hover:bg-red-100 w-full"
-                                            onClick={handleLogout}
-                                        >
-                                            <LogoutOutlined /> Đăng xuất
-                                        </button>
-                                    </li>
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-
-                </div>
-            )}
-        </div>
-    );
+  );
 };
 
 export default Bar;

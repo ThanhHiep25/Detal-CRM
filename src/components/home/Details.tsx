@@ -1,25 +1,35 @@
 
-import AppoinmentList from "../../page/appointment-LichHen/Danh_sach_lich_hen";
-import BookingPage from "../../page/appointment-LichHen/DatLichhen";
-import PageDetail from "../../page/auth/PageDetails";
-import CustomersList from "../../page/customer-KhachHang/Danh_sach_KH";
-import AddCustomerForm from "../../page/customer-KhachHang/Them_khach_hang";
-import DichVuTK from "../../page/dashboard-ThongKe/Dich_Vu_TK";
-import HieuSuatNV from "../../page/dashboard-ThongKe/Hieu_suat_NV";
-import ThongKeTC from "../../page/dashboard-ThongKe/Thong_Ke_TC";
+
+import HieuSuatNV from "../../page/dashboard/Hieu_suat_NV";
+import ThongKeTC from "../../page/dashboard/Thong_Ke_TC";
 import ServicePaymentHistory from "../../page/history/LS_ServiceSpa";
-import OrderAdd from "../../page/order-DonHang/OrderAdd";
-import OrderList from "../../page/order-DonHang/OrderList";
-import ProductAdd from "../../page/products-SanPham/ProductAdd";
-import ProductList from "../../page/products-SanPham/ProductList";
-import ServiceList from "../../page/serviceSpa/Danh_sach_DV";
-import AddService from "../../page/serviceSpa/Them_dich_vu";
-import EmployeeList from "../../page/staff-Nhanvien/Danh_sach_NV";
-import AssignmentStaff from "../../page/staff-Nhanvien/Phan_Cong_NV";
-import StaffAccounts from "../../page/staff-Nhanvien/StaffAccounts";
-import ThemMoiNV from "../../page/staff-Nhanvien/Them_nhan_vien";
+import OrderAdd from "../../page/order/OrderAdd";
+import OrderList from "../../page/order/OrderList";
+import ProductAdd from "../../page/products/ProductAdd";
+import ProductList from "../../page/products/ProductList";
+import EmployeeList from "../../page/employees/EmployeesList";
+import StaffAccounts from "../../page/employees/StaffAccounts";
 import OrderPaymentHistory from "../../page/history/LS_Order";
-import AssignmentSchedule from "../../page/staff-Nhanvien/Lich_PC";
+import AssignmentSchedule from "../../page/employees/AssignmentSchedule";
+import DentalStaffAssignment from "../../page/employees/DentalStaffAssignment";
+import { AppointmentPage } from "@/page/appointment/AppointmentPage";
+import { ServicePage } from "@/page/servicesDental/ServicePage";
+import { CustomerFormPage } from "@/page/customer/CustomerFormPage";
+import { ReferrerPage } from "@/page/customer/ReferrerPage";
+import { DailySchedulePage } from "@/page/appointment/DailySchedulePage";
+import { PersonalProfilePage } from "@/page/employees/PersonalProfilePage";
+import AppointmentList from "@/page/appointment/AppointmentList";
+import DentalAppointmentSchedule from "@/page/appointment/Dentalappointmentschedule";
+import CustomerList from "@/page/customer/CustomerList";
+import {motion} from 'framer-motion'
+import DrugList from "@/page/servicesDental/DrugList";
+import PrescriptionPage from "@/page/servicesDental/Prescription";
+import DiscountsPage from "@/page/discountCode/DIscounts";
+import PrescriptionListPage from "@/page/servicesDental/PrescriptionList";
+import PrescriptionSamplePage from "@/page/integration/PrescriptionSample";
+import SupplierList from "@/page/supplier/SupplierList";
+import DichVuTK from "@/page/dashboard/Service-statistics";
+import PaymentList from "@/page/servicesDental/PaymentList";
 
 
 interface DetailsProps {
@@ -29,32 +39,56 @@ interface DetailsProps {
 const Details: React.FC<DetailsProps> = ({ currentPage }) => {
     return (
         <div className="overflow-y-auto p-4 pb-10 bg-gray-200 dark:bg-gray-800  text-gray-900 dark:text-white" style={{ height: 'calc(100vh - 64px)' }}>
-            
+
             {/* Render chi tiết trang tùy thuộc vào currentPage */}
-            
-            {currentPage === 'home' && <PageDetail />}
+            {currentPage === 'home' &&
+                <div className="flex flex-col items-center justify-center h-full bg-white rounded-xl shadow-lg p-6">
+                    <motion.img src="/tooth.png" alt="tooth" className="w-24 h-24 mb-4 animate-bounce" />
+                    <p className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-blue-500 to-pink-500">Chào mừng đến với hệ thống quản lý Nha Khoa!</p>
+                </div>
+            }
+
             {currentPage === 'hsnv' && <HieuSuatNV />}
             {currentPage === 'tktc' && <ThongKeTC />}
             {currentPage === 'dichvutk' && <DichVuTK />}
 
             {/* Nhan vien */}
-            {currentPage === 'themNV' && <ThemMoiNV/>}
-            {currentPage === 'danhsachNV' && <EmployeeList/>}
-            {currentPage === 'danhsachTaiKhoanNV' && <StaffAccounts/>}
-            {currentPage === 'phancongNV' && <AssignmentStaff/>}
-            {currentPage === 'lichNV' && <AssignmentSchedule/>}
+            {currentPage === 'themNV' && <PersonalProfilePage />}
+            {currentPage === 'danhsachNV' && <EmployeeList />}
+            {currentPage === 'danhsachTaiKhoanNV' && <StaffAccounts />}
+            {currentPage === 'phancongNV' && <DentalStaffAssignment />}
+            {currentPage === 'lichNV' && <AssignmentSchedule />}
 
             {/* Khach hang */}
-            {currentPage === 'themKH' && <AddCustomerForm />}
-            {currentPage === "danhsachKH" && <CustomersList/>}
+            {currentPage === 'themKH' && <CustomerFormPage />}
+            {currentPage === "danhsachKH" && <CustomerList />}
+            {currentPage === "nguoigt" && <ReferrerPage />}
+
 
             {/* Dịch vụ */}
-            {currentPage === 'themSPA' && <AddService />}
-            {currentPage === 'dichvuSPA' && <ServiceList />}
+            {currentPage === 'them' && ''}
+            {currentPage === 'drugs' && <DrugList />}
+            {currentPage === 'prescription' && <PrescriptionPage />}
+            {currentPage === 'serviceDental' && <ServicePage />}
+            {currentPage === 'prescriptionlist' && <PrescriptionListPage />}
+            {currentPage === 'paymentlist' && <PaymentList />}
 
             {/* Lịch hẹn */}
-            {currentPage === 'themLH' && <BookingPage />}
-            {currentPage === 'danhsachLH' && <AppoinmentList/>}
+            {currentPage === 'themLH' && <AppointmentPage />}
+            {currentPage === 'danhsachLH' && <AppointmentList />}
+            {currentPage === 'lichTrongNgay' && <DailySchedulePage />}
+            {currentPage === 'lichTheoNgay' && ''}
+            {currentPage === 'lichTheoBacSi' && <DentalAppointmentSchedule />}
+
+            {/* Thẻ + ưu đãi */}
+            {currentPage === 'danhsachThe' && <DiscountsPage />}
+
+            {/* Tích hợp */}
+            {currentPage === 'prescriptionsample' && <PrescriptionSamplePage />}
+
+            {/* Kho */}
+            {currentPage === 'supplier' && <SupplierList />}
+         
 
             {/* Sản phẩm */}
             {currentPage === 'themSP' && <ProductAdd />}
@@ -66,7 +100,7 @@ const Details: React.FC<DetailsProps> = ({ currentPage }) => {
 
             {/* Lịch sử */}
             {currentPage === 'lsdv' && <ServicePaymentHistory />}
-            {currentPage === "lsdh" && <OrderPaymentHistory/>}
+            {currentPage === "lsdh" && <OrderPaymentHistory />}
         </div>
     );
 }

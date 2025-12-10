@@ -1,0 +1,17 @@
+{
+  
+  "login": "Đăng Nhập",
+  "register": "Đăng Ký",
+  "password": "Mật Khẩu",
+  "fpassword": "Quên Mật Khẩu ?",
+  "email": "Email",
+  "name": "Họ & Tên",
+  "phone": "Số Điện Thoại",
+  "st":"Bạn chưa có tài khoản? Đăng ký ngay",
+  "profile": "Hồ Sơ",
+  "settings": "Cài Đặt",
+  "logout": "Đăng Xuất",
+  "language": "Ngôn Ngữ",
+  "english": "Tiếng Anh",
+  "vietnamese": "Tiếng Việt"
+}

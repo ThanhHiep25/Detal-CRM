@@ -1,17 +1,13 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import RegisterForm from "../page/auth/Register";
-import GetUser from "../page/auth/GetUser";
-import LoginForm from "../page/auth/LoginForm";
-import Home from "../page/home-TrangChinh/Home";
+import Home from "../page/home/Home";
 import SettingsDetail from "../page/setting/SettingsDetail";
-import ProfileDetail from "../page/auth/ProfileDetail";
-import ForgotPassword from "../page/auth/ForgotPassword";
 import NotFound from "../components/notFound/pageNotFound";
 import TermsAndConditionsPage from "../page/termsAndConditionsPage/TermsAndConditionsPage";
 import PaymentSuccess from "../page/Payment/PaymentSuccess";
-import Chatbot from "../components/google/Chatbot";
 import GooglePaySuccess from "../page/Payment/GooglePaySuccess";
+import ProfilePage from "@/page/profile/page";
+import DentalInfoManagement from "@/page/setting/DentalInfoManagement";
 
 
 
@@ -21,14 +17,10 @@ const NavigatorBrowser: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/login" element={<LoginForm />} />
-        <Route path="/register" element={<RegisterForm />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/getuserid" element={<GetUser />} />
-        <Route path="/profile" element={<ProfileDetail />} />
         <Route path="/settings" element= {<SettingsDetail />} />
+        <Route path="/dental-info" element= {<DentalInfoManagement />} />
+        <Route path="/profile" element= {<ProfilePage />} />
         <Route path="/policy" element={<TermsAndConditionsPage/>}/>
-        <Route path="/chatbot" element={<Chatbot />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/google-pay-success" element={<GooglePaySuccess />} />
         <Route path="*" element={<NotFound />} />
