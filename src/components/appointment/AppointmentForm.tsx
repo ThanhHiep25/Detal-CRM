@@ -277,9 +277,9 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
     if (!custEmail.trim() && !custPhone.trim()) { toast.error('Nhập email hoặc số điện thoại'); return; }
     setConsultationSubmitting(true);
     try {
-      // determine dentist/assistant to send: backend may expect the userId of the dentist record
-      const resolvedDentistId = typeof dentistId === 'number' ? (dentists.find(d => d.id === dentistId)?.userId ?? dentistId) : undefined;
-      const resolvedAssistantId = typeof assistantId === 'number' ? (dentists.find(d => d.id === assistantId)?.userId ?? assistantId) : undefined;
+      // Only send when user chọn; không map sang userId để tránh giá trị mặc định
+      const resolvedDentistId = typeof dentistId === 'number' ? dentistId : undefined;
+      const resolvedAssistantId = typeof assistantId === 'number' ? assistantId : undefined;
 
       // validate scheduled time (if provided) is within business hours
       if (scheduledTime && !isTimeInBusinessHours(scheduledTime)) {
@@ -428,7 +428,7 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
                   setAssistantId(Number.isNaN(n) ? '' : n);
                 }}>
                   <MenuItem value=""><em>{dentistsLoading ? 'Đang tải...' : 'Chọn phụ tá'}</em></MenuItem>
-                  {dentists.map(d => <MenuItem key={d.id} value={d.userId ?? d.id}>{d.name}</MenuItem>)}
+                  {dentists.map(d => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
                 </Select>
               </FormControl>
             </Grid>

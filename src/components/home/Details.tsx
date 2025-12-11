@@ -30,6 +30,7 @@ import PrescriptionSamplePage from "@/page/integration/PrescriptionSample";
 import SupplierList from "@/page/supplier/SupplierList";
 import DichVuTK from "@/page/dashboard/Service-statistics";
 import PaymentList from "@/page/servicesDental/PaymentList";
+import Consultation from "@/page/consultation/Consultation";
 
 
 interface DetailsProps {
@@ -77,7 +78,7 @@ const Details: React.FC<DetailsProps> = ({ currentPage }) => {
             {currentPage === 'themLH' && <AppointmentPage />}
             {currentPage === 'danhsachLH' && <AppointmentList />}
             {currentPage === 'lichTrongNgay' && <DailySchedulePage />}
-            {currentPage === 'lichTheoNgay' && ''}
+            {currentPage === 'lichTuVan' && <Consultation /> }
             {currentPage === 'lichTheoBacSi' && <DentalAppointmentSchedule />}
 
             {/* Thẻ + ưu đãi */}

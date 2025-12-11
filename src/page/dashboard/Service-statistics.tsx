@@ -27,7 +27,7 @@ import {
 } from '@mui/material';
 
 import { motion } from 'framer-motion';
-import { ResponsiveContainer, BarChart, ComposedChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LabelList, Line } from 'recharts';
+import { ResponsiveContainer, BarChart, ComposedChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LabelList, Line, Cell } from 'recharts';
 import type { TooltipProps } from 'recharts';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { FaDollarSign, FaCalendarCheck, FaChartBar } from 'react-icons/fa';
@@ -568,7 +568,7 @@ const DichVuTK: React.FC = () => {
             type ExcelCell = { value?: unknown; font?: unknown; alignment?: unknown; fill?: unknown; border?: unknown; numFmt?: string };
             type ExcelRow = { getCell: (n: number) => ExcelCell; eachCell?: (opts: unknown, cb: (cell: ExcelCell) => void) => void; commit?: () => void; height?: number };
             type ExcelSheet = { columns?: unknown; addRow: (row: unknown) => void; autoFilter?: unknown; lastRow?: { number: number }; getRow: (n: number) => ExcelRow; getCell: (c: string) => ExcelCell; views?: unknown; mergeCells?: (...args: unknown[]) => void };
-            type ExcelWorkbook = { addWorksheet: (name: string) => ExcelSheet; xlsx: { writeBuffer: () => Promise<Uint8Array | ArrayBuffer> } };
+            type ExcelWorkbook = { addWorksheet: (name: string, options?: unknown) => ExcelSheet; xlsx: { writeBuffer: () => Promise<Uint8Array | ArrayBuffer> } };
             type ExcelModule = { Workbook: new () => ExcelWorkbook };
             const ExcelJS = (mod as unknown) as ExcelModule;
             const workbook = new ExcelJS.Workbook();
@@ -702,7 +702,7 @@ const DichVuTK: React.FC = () => {
             type ExcelCell = { value?: unknown; font?: unknown; alignment?: unknown; fill?: unknown; border?: unknown };
             type ExcelRow = { getCell: (n: number) => ExcelCell; eachCell?: (opts: unknown, cb: (cell: ExcelCell) => void) => void; commit?: () => void; height?: number };
             type ExcelSheet = { columns?: unknown; addRow: (row: unknown) => void; autoFilter?: unknown; lastRow?: { number: number }; getRow: (n: number) => ExcelRow; getCell: (c: string) => ExcelCell; views?: unknown; mergeCells?: (...args: unknown[]) => void; addChart?: (chart: unknown) => void };
-            type ExcelWorkbook = { addWorksheet: (name: string) => ExcelSheet; xlsx: { writeBuffer: () => Promise<Uint8Array | ArrayBuffer> } };
+            type ExcelWorkbook = { addWorksheet: (name: string, options?: unknown) => ExcelSheet; xlsx: { writeBuffer: () => Promise<Uint8Array | ArrayBuffer> } };
             const ExcelJS = (mod as unknown) as { Workbook: new () => ExcelWorkbook; BarChart: new () => unknown; PieChart: new () => unknown };
             const workbook = new ExcelJS.Workbook();
 
@@ -735,21 +735,21 @@ const DichVuTK: React.FC = () => {
 
             // Create summary table for chart data (rows 5-N)
             const dataStartRow = 5;
-            summarySheet.getCell(`A${dataStartRow}`).value = 'Nha Sĩ';
-            summarySheet.getCell(`B${dataStartRow}`).value = 'Số Lượt';
-            summarySheet.getCell(`C${dataStartRow}`).value = 'Doanh Thu (VNĐ)';
+            ((summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(dataStartRow, 1) as unknown as { value: unknown }).value = 'Nha Sĩ';
+            ((summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(dataStartRow, 2) as unknown as { value: unknown }).value = 'Số Lượt';
+            ((summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(dataStartRow, 3) as unknown as { value: unknown }).value = 'Doanh Thu (VNĐ)';
             [1, 2, 3].forEach(i => {
-                const cell = summarySheet.getCell(dataStartRow, i) as unknown as { font?: unknown; fill?: unknown };
+                const cell = (summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(dataStartRow, i) as unknown as { font?: unknown; fill?: unknown };
                 cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
             });
 
             chartData.forEach((d, idx) => {
                 const row = dataStartRow + idx + 1;
-                summarySheet.getCell(`A${row}`).value = d.name;
-                summarySheet.getCell(`B${row}`).value = d.total;
-                summarySheet.getCell(`C${row}`).value = d.revenue;
-                const cCell = summarySheet.getCell(`C${row}`) as unknown as { numFmt?: string };
+                ((summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 1) as unknown as { value: unknown }).value = d.name;
+                ((summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 2) as unknown as { value: unknown }).value = d.total;
+                ((summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 3) as unknown as { value: unknown }).value = d.revenue;
+                const cCell = (summarySheet as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 3) as unknown as { numFmt?: string };
                 cCell.numFmt = '#,##0';
             });
 
@@ -877,7 +877,7 @@ const DichVuTK: React.FC = () => {
             setExportingXlsx(true);
             const mod = await import('exceljs');
             type ExcelSheet = { columns?: unknown; addRow: (row: unknown) => void; autoFilter?: unknown; lastRow?: { number: number }; mergeCells?: (...args: unknown[]) => void; getRow?: (n: number) => unknown };
-            type ExcelWorkbook = { addWorksheet: (name: string) => ExcelSheet; xlsx: { writeBuffer: () => Promise<Uint8Array | ArrayBuffer> } };
+            type ExcelWorkbook = { addWorksheet: (name: string, options?: unknown) => ExcelSheet; xlsx: { writeBuffer: () => Promise<Uint8Array | ArrayBuffer> } };
             type ExcelModule = { Workbook: new () => ExcelWorkbook };
             const ExcelJS = (mod as unknown) as ExcelModule;
             const workbook = new ExcelJS.Workbook();
@@ -886,38 +886,38 @@ const DichVuTK: React.FC = () => {
             const exportedAt = now.toISOString().replace('T', ' ').slice(0, 19);
 
             // ========== SHEET 1: BÁO CÁO TỔNG HỢP ==========
-            const summary = workbook.addWorksheet('📊 Báo Cáo Tổng Hợp', { pageSetup: { paperSize: 9, orientation: 'portrait' } });
+            const summary = (workbook as unknown as { addWorksheet: (name: string, opts: unknown) => unknown }).addWorksheet('📊 Báo Cáo Tổng Hợp', { pageSetup: { paperSize: 9, orientation: 'portrait' } }) as unknown as ExcelSheet;
 
             // Header
             (summary as unknown as ExcelSheet).mergeCells!(1, 1, 1, 5);
-            const titleCell = summary.getCell('A1') as unknown as { value?: unknown; font?: unknown; alignment?: unknown; fill?: unknown };
+            const titleCell = (summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(1, 1) as unknown as { value?: unknown; font?: unknown; alignment?: unknown; fill?: unknown };
             titleCell.value = 'BÁO CÁO THỐNG KÊ DOANH SỐ DỊCH VỤ';
             titleCell.font = { bold: true, name: 'Arial', size: 16, color: { argb: 'FFFFFFFF' } };
             titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
             titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-            summary.getRow(1).height = 30;
+            ((summary as unknown as { getRow: (n: number) => unknown }).getRow(1) as unknown as { height?: number }).height = 30;
 
-            summary.getRow(2).height = 3;
+            ((summary as unknown as { getRow: (n: number) => unknown }).getRow(2) as unknown as { height?: number }).height = 3;
 
             // Company info
             const infoStartRow = 3;
             (summary as unknown as ExcelSheet).mergeCells!(infoStartRow, 1, infoStartRow, 2);
-            summary.getCell(`A${infoStartRow}`).value = 'Tên Công Ty:';
+            ((summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(infoStartRow, 1) as unknown as { value: unknown }).value = 'Tên Công Ty:';
             (summary as unknown as ExcelSheet).mergeCells!(infoStartRow, 3, infoStartRow, 5);
-            summary.getCell(`C${infoStartRow}`).value = 'NHA KHOA CRM - QUẢN LÝ BỆNH NHÂN';
-            summary.getCell(`A${infoStartRow+1}`).value = 'Thời gian báo cáo:';
+            ((summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(infoStartRow, 3) as unknown as { value: unknown }).value = 'NHA KHOA CRM - QUẢN LÝ BỆNH NHÂN';
+            ((summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(infoStartRow+1, 1) as unknown as { value: unknown }).value = 'Thời gian báo cáo:';
             (summary as unknown as ExcelSheet).mergeCells!(infoStartRow+1, 3, infoStartRow+1, 5);
-            summary.getCell(`C${infoStartRow+1}`).value = `${startDate} đến ${endDate}`;
-            summary.getCell(`A${infoStartRow+2}`).value = 'Ngày xuất báo cáo:';
+            ((summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(infoStartRow+1, 3) as unknown as { value: unknown }).value = `${startDate} đến ${endDate}`;
+            ((summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(infoStartRow+2, 1) as unknown as { value: unknown }).value = 'Ngày xuất báo cáo:';
             (summary as unknown as ExcelSheet).mergeCells!(infoStartRow+2, 3, infoStartRow+2, 5);
-            summary.getCell(`C${infoStartRow+2}`).value = exportedAt;
+            ((summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(infoStartRow+2, 3) as unknown as { value: unknown }).value = exportedAt;
 
             // KPI Summary
             const kpiRow = infoStartRow + 4;
-            summary.getRow(kpiRow).height = 20;
+            (summary as unknown as { getRow: (n: number) => { height?: number } }).getRow(kpiRow).height = 20;
             const kpiHeaders = ['CHỈ TIÊU', 'GIÁ TRỊ', 'GHI CHÚ'];
             kpiHeaders.forEach((h, i) => {
-                const cell = summary.getCell(kpiRow, i + 1) as unknown as { value?: unknown; font?: unknown; fill?: unknown; alignment?: unknown; border?: unknown };
+                const cell = (summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(kpiRow, i + 1) as unknown as { value?: unknown; font?: unknown; fill?: unknown; alignment?: unknown; border?: unknown };
                 cell.value = h;
                 cell.font = { bold: true, name: 'Arial', size: 11, color: { argb: 'FFFFFFFF' } };
                 cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E75B6' } };
@@ -936,18 +936,18 @@ const DichVuTK: React.FC = () => {
 
             kpis.forEach((kpi, idx) => {
                 const row = kpiRow + idx + 1;
-                const nameCell = summary.getCell(row, 1) as unknown as { value?: unknown; font?: unknown; border?: unknown };
+                const nameCell = (summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 1) as unknown as { value?: unknown; font?: unknown; border?: unknown };
                 nameCell.value = kpi.name;
                 nameCell.font = { name: 'Arial', size: 10 };
                 nameCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
 
-                const valCell = summary.getCell(row, 2) as unknown as { value?: unknown; numFmt?: string; font?: unknown; border?: unknown };
+                const valCell = (summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 2) as unknown as { value?: unknown; numFmt?: string; font?: unknown; border?: unknown };
                 valCell.value = kpi.value;
                 valCell.numFmt = '#,##0';
                 valCell.font = { bold: true, name: 'Arial', size: 11, color: { argb: 'FF1F4E78' } };
                 valCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
 
-                const noteCell = summary.getCell(row, 3) as unknown as { value?: unknown; font?: unknown; border?: unknown };
+                const noteCell = (summary as unknown as { getCell: (row: number, col: number) => unknown }).getCell(row, 3) as unknown as { value?: unknown; font?: unknown; border?: unknown };
                 noteCell.value = kpi.note;
                 noteCell.font = { name: 'Arial', size: 9, italic: true };
                 noteCell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
@@ -956,7 +956,7 @@ const DichVuTK: React.FC = () => {
             summary.columns = [{ width: 35 }, { width: 18 }, { width: 25 }];
 
             // ========== SHEET 2: CHI TIẾT DỊCH VỤ ==========
-            const svcSheet = workbook.addWorksheet('🏥 Dịch Vụ', { pageSetup: { paperSize: 9, orientation: 'landscape' } });
+            const svcSheet = (workbook as unknown as { addWorksheet: (name: string, opts: unknown) => unknown }).addWorksheet('🏥 Dịch Vụ', { pageSetup: { paperSize: 9, orientation: 'landscape' } }) as unknown as ExcelSheet;
             svcSheet.columns = [
                 { header: 'STT', key: 'stt', width: 6 },
                 { header: 'Tên Dịch Vụ', key: 'service', width: 35 },
@@ -988,9 +988,9 @@ const DichVuTK: React.FC = () => {
             });
 
             // Format Service sheet header
-            const svcHeaderRow = svcSheet.getRow(1);
-            if (svcHeaderRow && (svcHeaderRow as unknown as { eachCell?: (cb: (cell: unknown) => void) => void }).eachCell) {
-                (svcHeaderRow as unknown as { eachCell: (cb: (cell: unknown) => void) => void }).eachCell((cell: unknown) => {
+            const svcHeaderRow = (svcSheet as unknown as { getRow: (n: number) => unknown }).getRow(1) as unknown as { eachCell?: (cb: (cell: unknown) => void) => void; height?: number };
+            if (svcHeaderRow?.eachCell) {
+                svcHeaderRow.eachCell((cell: unknown) => {
                     const c = cell as { font?: unknown; fill?: unknown; alignment?: unknown; border?: unknown };
                     c.font = { bold: true, name: 'Arial', size: 11, color: { argb: 'FFFFFFFF' } };
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
@@ -1001,7 +1001,7 @@ const DichVuTK: React.FC = () => {
             }
 
             // Totals row
-            const totalSvcRow = svcSheet.addRow({ 
+            const totalSvcRow = (svcSheet.addRow({ 
                 stt: '', 
                 service: 'TỔNG CỘNG', 
                 count: totalBookings,
@@ -1009,9 +1009,9 @@ const DichVuTK: React.FC = () => {
                 unit: '', 
                 revenue: totalRev, 
                 percent: 100 
-            });
-            if (totalSvcRow && (totalSvcRow as unknown as { eachCell?: (cb: (cell: unknown) => void) => void }).eachCell) {
-                (totalSvcRow as unknown as { eachCell: (cb: (cell: unknown) => void) => void }).eachCell((cell: unknown) => {
+            }) as unknown as { eachCell?: (cb: (cell: unknown) => void) => void });
+            if (totalSvcRow?.eachCell) {
+                totalSvcRow.eachCell((cell: unknown) => {
                     const c = cell as { font?: unknown; fill?: unknown; border?: unknown };
                     c.font = { bold: true, name: 'Arial', size: 11 };
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2DCDB' } };
@@ -1020,8 +1020,8 @@ const DichVuTK: React.FC = () => {
             }
 
             // Format numbers in service sheet
-            for (let i = 2; i <= svcSheet.rowCount; i++) {
-                const row = svcSheet.getRow(i);
+            for (let i = 2; i <= (svcSheet as unknown as { rowCount?: number }).rowCount!; i++) {
+                const row = (svcSheet as unknown as { getRow: (n: number) => unknown }).getRow(i) as unknown as { getCell: (col: number) => unknown };
                 ([4, 5, 6] as const).forEach(col => {
                     const cell = row.getCell(col) as unknown as { numFmt?: string };
                     cell.numFmt = '#,##0';
@@ -1029,7 +1029,7 @@ const DichVuTK: React.FC = () => {
             }
 
             // ========== SHEET 3: CHI TIẾT NHA SĨ ==========
-            const dSheet = workbook.addWorksheet('👨‍⚕️ Nha Sĩ', { pageSetup: { paperSize: 9, orientation: 'landscape' } });
+            const dSheet = (workbook as unknown as { addWorksheet: (name: string, opts: unknown) => unknown }).addWorksheet('👨‍⚕️ Nha Sĩ', { pageSetup: { paperSize: 9, orientation: 'landscape' } }) as unknown as ExcelSheet;
             dSheet.columns = [
                 { header: 'STT', key: 'stt', width: 6 },
                 { header: 'ID', key: 'id', width: 8 },
@@ -1063,9 +1063,9 @@ const DichVuTK: React.FC = () => {
             });
 
             // Format Dentist sheet header
-            const dHeaderRow = dSheet.getRow(1);
-            if (dHeaderRow && (dHeaderRow as unknown as { eachCell?: (cb: (cell: unknown) => void) => void }).eachCell) {
-                (dHeaderRow as unknown as { eachCell: (cb: (cell: unknown) => void) => void }).eachCell((cell: unknown) => {
+            const dHeaderRow = (dSheet as unknown as { getRow: (n: number) => unknown }).getRow(1) as unknown as { eachCell?: (cb: (cell: unknown) => void) => void; height?: number };
+            if (dHeaderRow?.eachCell) {
+                dHeaderRow.eachCell((cell: unknown) => {
                     const c = cell as { font?: unknown; fill?: unknown; alignment?: unknown; border?: unknown };
                     c.font = { bold: true, name: 'Arial', size: 11, color: { argb: 'FFFFFFFF' } };
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF70AD47' } };
@@ -1077,7 +1077,7 @@ const DichVuTK: React.FC = () => {
 
             // Totals row
             const totalDentistCompleted = completedAppointments.length;
-            const totalDentistRow = dSheet.addRow({ 
+            const totalDentistRow = (dSheet.addRow({ 
                 stt: '', 
                 id: '', 
                 name: 'TỔNG CỘNG', 
@@ -1087,9 +1087,9 @@ const DichVuTK: React.FC = () => {
                 completion: sortedDentists.reduce((s, d) => s + d.total, 0) > 0 ? ((totalDentistCompleted / sortedDentists.reduce((s, d) => s + d.total, 0)) * 100) : 0,
                 revenue: sortedDentists.reduce((s, d) => s + (d.revenue || 0), 0),
                 avg_revenue: totalDentistCompleted > 0 ? Math.round(sortedDentists.reduce((s, d) => s + (d.revenue || 0), 0) / totalDentistCompleted) : 0,
-            });
-            if (totalDentistRow && (totalDentistRow as unknown as { eachCell?: (cb: (cell: unknown) => void) => void }).eachCell) {
-                (totalDentistRow as unknown as { eachCell: (cb: (cell: unknown) => void) => void }).eachCell((cell: unknown) => {
+            }) as unknown as { eachCell?: (cb: (cell: unknown) => void) => void });
+            if (totalDentistRow?.eachCell) {
+                totalDentistRow.eachCell((cell: unknown) => {
                     const c = cell as { font?: unknown; fill?: unknown; border?: unknown };
                     c.font = { bold: true, name: 'Arial', size: 11 };
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2DCDB' } };
@@ -1098,8 +1098,8 @@ const DichVuTK: React.FC = () => {
             }
 
             // Format numbers in dentist sheet
-            for (let i = 2; i <= dSheet.rowCount; i++) {
-                const row = dSheet.getRow(i);
+            for (let i = 2; i <= (dSheet as unknown as { rowCount?: number }).rowCount!; i++) {
+                const row = (dSheet as unknown as { getRow: (n: number) => unknown }).getRow(i) as unknown as { getCell: (col: number) => unknown };
                 ([7, 8, 9] as const).forEach(col => {
                     const cell = row.getCell(col) as unknown as { numFmt?: string };
                     cell.numFmt = '#,##0.00';
@@ -1107,7 +1107,7 @@ const DichVuTK: React.FC = () => {
             }
 
             // ========== SHEET 4: CHI TIẾT LỊCH HẸN ==========
-            const appointmentSheet = workbook.addWorksheet('📅 Lịch Hẹn', { pageSetup: { paperSize: 9, orientation: 'landscape' } });
+            const appointmentSheet = (workbook as unknown as { addWorksheet: (name: string, opts: unknown) => unknown }).addWorksheet('📅 Lịch Hẹn', { pageSetup: { paperSize: 9, orientation: 'landscape' } }) as unknown as ExcelSheet;
             appointmentSheet.columns = [
                 { header: 'STT', key: 'stt', width: 6 },
                 { header: 'ID Lịch', key: 'id', width: 10 },
@@ -1143,9 +1143,9 @@ const DichVuTK: React.FC = () => {
             });
 
             // Format Appointment sheet header
-            const aHeaderRow = appointmentSheet.getRow(1);
-            if (aHeaderRow && (aHeaderRow as unknown as { eachCell?: (cb: (cell: unknown) => void) => void }).eachCell) {
-                (aHeaderRow as unknown as { eachCell: (cb: (cell: unknown) => void) => void }).eachCell((cell: unknown) => {
+            const aHeaderRow = (appointmentSheet as unknown as { getRow: (n: number) => unknown }).getRow(1) as unknown as { eachCell?: (cb: (cell: unknown) => void) => void; height?: number };
+            if (aHeaderRow?.eachCell) {
+                aHeaderRow.eachCell((cell: unknown) => {
                     const c = cell as { font?: unknown; fill?: unknown; alignment?: unknown; border?: unknown };
                     c.font = { bold: true, name: 'Arial', size: 10, color: { argb: 'FFFFFFFF' } };
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF5B9BD5' } };
@@ -1156,13 +1156,13 @@ const DichVuTK: React.FC = () => {
             }
 
             // Format numbers and colors in appointment sheet
-            for (let i = 2; i <= appointmentSheet.rowCount; i++) {
-                const row = appointmentSheet.getRow(i);
+            for (let i = 2; i <= (appointmentSheet as unknown as { rowCount?: number }).rowCount!; i++) {
+                const row = (appointmentSheet as unknown as { getRow: (n: number) => unknown }).getRow(i) as unknown as { getCell: (col: number) => unknown };
                 const priceCell = row.getCell(9) as unknown as { numFmt?: string };
                 priceCell.numFmt = '#,##0';
                 
                 const statusCell = row.getCell(10) as unknown as { fill?: unknown };
-                const status = row.getCell(10).value as string;
+                const status = (row.getCell(10) as unknown as { value?: unknown }).value as string;
                 if (status?.toString().toUpperCase() === 'COMPLETED') {
                     statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } };
                 } else {
@@ -1195,6 +1195,14 @@ const DichVuTK: React.FC = () => {
     const totalBookings = pieChartData.reduce((sum, data) => sum + data.count, 0);
     const totalRevenue = pieChartData.reduce((sum, data) => sum + data.totalPrice, 0);
     const totalServices = Object.keys(serviceUsage).length;
+
+    // Color palette for services
+    const colorPalette = [
+        '#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe',
+        '#43e97b', '#38f9d7', '#fa709a', '#fee140', '#30b0fe',
+        '#a8edea', '#fed6e3', '#ff9a56', '#ff6b9d', '#c44569',
+        '#1dd1a1', '#10ac84', '#ee5a6f', '#f368e0', '#ff6348'
+    ];
 
     // Custom Tooltip cho PieChart để hiển thị chi tiết hơn
 
@@ -1503,25 +1511,36 @@ const DichVuTK: React.FC = () => {
                                     <div ref={serviceChartRef} style={{ width: '100%', height: 380 }}>
                                         <ResponsiveContainer width="100%" height={380}>
                                             <BarChart
-                                                layout="vertical"
                                                 data={serviceBarData}
-                                                margin={{ top: 20, right: 30, left: 180, bottom: 5 }}
+                                                margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
                                             >
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                <XAxis type="number" tick={{ fontSize: 12 }} />
-                                                <YAxis type="category" dataKey="name" width={170} tick={{ fontSize: 11 }} />
+                                                <XAxis dataKey="name" interval={0} angle={-45} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+                                                <YAxis tick={{ fontSize: 12 }} />
                                                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
-                                                <Bar dataKey="count" fill="url(#colorGradient)" name="Lượt đặt" radius={[0, 8, 8, 0]}>
-                                                    <LabelList dataKey="count" position="right" formatter={(val: number) => val.toLocaleString()} />
+                                                <Bar dataKey="count" name="Lượt đặt" radius={[8, 8, 0, 0]}>
+                                                    {serviceBarData.map((_, index) => (
+                                                        <Cell key={`cell-${index}`} fill={colorPalette[index % colorPalette.length]} />
+                                                    ))}
+                                                    <LabelList dataKey="count" position="top" formatter={(val: number) => val.toLocaleString()} />
                                                 </Bar>
-                                                <defs>
-                                                    <linearGradient id="colorGradient" x1="0" y1="0" x2="1" y2="0">
-                                                        <stop offset="0%" stopColor="#667eea" />
-                                                        <stop offset="100%" stopColor="#764ba2" />
-                                                    </linearGradient>
-                                                </defs>
                                             </BarChart>
                                         </ResponsiveContainer>
+                                    </div>
+                                    {/* Color legend */}
+                                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                                        <Typography variant="body2" className="font-semibold text-gray-700 mb-3">Chú thích màu sắc:</Typography>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                                            {serviceBarData.map((item, idx) => (
+                                                <div key={idx} className="flex items-center gap-2">
+                                                    <div 
+                                                        className="w-4 h-4 rounded" 
+                                                        style={{ backgroundColor: colorPalette[idx % colorPalette.length] }}
+                                                    ></div>
+                                                    <span className="text-xs text-gray-600 truncate">{item.name}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>

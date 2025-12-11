@@ -33,7 +33,7 @@ export function CalendarView({ date, setDate }: CalendarViewProps) {
         <StaticDatePicker
           displayStaticWrapperAs="desktop"
           value={date}
-          onChange={(newDate) => setDate(newDate)}
+          onChange={(newDate) => setDate(newDate as Date | null)}
           sx={{
             '.MuiPickersLayout-toolbar, .MuiDialogActions-root': { display: 'none' },
             '.MuiPickersDay-root.Mui-selected': {

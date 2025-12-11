@@ -91,6 +91,16 @@ export default function AppointmentDetail({ open, item, onClose, onUpdated }: Pr
           {!editing ? (
             <>
               <Button onClick={() => setEditing(true)}>Chỉnh sửa</Button>
+              <Button
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: item.id } }));
+                    onClose();
+                  } catch (err) { console.warn('app:navigate dispatch failed', err); }
+                }}
+              >
+                Điều trị
+              </Button>
               <Button color="error" onClick={handleCancel}>Hủy</Button>
               <Button variant="contained" onClick={onClose}>Đóng</Button>
             </>

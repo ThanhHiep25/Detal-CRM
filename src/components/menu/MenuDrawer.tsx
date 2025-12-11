@@ -67,6 +67,7 @@ const menuItems: MenuItem[] = [
             // { name: 'Lịch hẹn theo ngày', page: 'lichTrongThang', index: 20 },
             { name: 'Lịch hẹn của tôi', page: 'lichTheoBacSi', index: 21, roles: ['ROLE_DENTIST'] },
             { name: 'Danh sách lịch hẹn', page: 'danhsachLH', index: 22, roles: ['ROLE_ADMIN', 'ROLE_MANAGER', 'ROLE_RECEPTIONIST'] },
+            { name: 'Danh sách lịch tư vấn ', page: 'lichTuVan', index: 39, roles: ['ROLE_ADMIN', 'ROLE_MANAGER', 'ROLE_RECEPTIONIST'] },   
         ]
         ,
         //roles: ['ROLE_ADMIN', 'ROLE_DENTIST']

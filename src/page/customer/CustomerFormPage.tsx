@@ -284,6 +284,25 @@ export function CustomerFormPage() {
                                 const res = await UserAPI.createUserFull(payload) as ApiResponse;
                                 if (res && res.success) {
                                     toast.success('Tạo khách hàng thành công');
+                                    setFullName('');
+                                    setPhone('');
+                                    setEmail('');
+                                    setBirthDate('');
+                                    setGender('');
+                                    setSourceDetail('');
+                                    setAddress('');
+                                    setIsReturning(false);
+                                    setProvince('');
+                                    setDistrict('');
+                                    setWard('');
+                                    setEmergencyContact('');
+                                    setSelectedReferrer(null);
+                                    setCustomerSource('');
+                                    setOccupationId('');
+                                    setNationalityId('');
+                                    setCustomerGroupIds([]);
+                                    setBranchId('');
+                                    
 
                                     // if scheduler is shown and we have scheduler payload, create appointment
                                     if (showScheduler && schedulerPayload) {

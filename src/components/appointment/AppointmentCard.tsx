@@ -13,10 +13,17 @@ interface AppointmentCardProps {
   };
   top: number;
   height: number;
+  customColor?: { main: string; light: string; text: string }; // Allow custom color override
+  leftPercent?: number;
+  widthPercent?: number;
+  showTreatment?: boolean;
 }
 
-export function AppointmentCard({ appointment, top, height }: AppointmentCardProps) {
-  const color = statusColors[appointment.status] || statusColors.confirmed;
+export function AppointmentCard({ appointment, top, height, customColor, leftPercent, widthPercent, showTreatment }: AppointmentCardProps) {
+  const defaultColor = statusColors[appointment.status] || statusColors.confirmed;
+  const color = customColor || defaultColor;
+  const statusStr = String(appointment.status || '').toLowerCase();
+  const treatmentDisabled = statusStr.includes('complete');
 
   return (
     <Box
@@ -24,8 +31,7 @@ export function AppointmentCard({ appointment, top, height }: AppointmentCardPro
         position: 'absolute',
         top: `${top}px`,
         height: `${height}px`,
-        left: '4px',
-        right: '4px',
+        minHeight: '80px',
         backgroundColor: color.light,
         borderLeft: `4px solid ${color.main}`,
         borderRadius: '4px',
@@ -34,10 +40,29 @@ export function AppointmentCard({ appointment, top, height }: AppointmentCardPro
         cursor: 'pointer',
         '&:hover': {
           opacity: 0.8,
-        }
+        },
+        // conditional horizontal positioning: use percentage-based layout when provided
+        ...(leftPercent !== undefined && widthPercent !== undefined
+          ? { left: `${leftPercent}%`, width: `${widthPercent}%` }
+          : { left: '4px', right: '4px' })
       }}
     >
-      <Button size="small" variant="outlined" onClick={(e) => { e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: appointment.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); } }} sx={{ position: 'absolute', top: 6, right: 6, minWidth: 0, padding: '4px 6px', fontSize: '0.7rem' }}>Điều trị</Button>
+      {showTreatment && (
+        <Button size="small"
+          variant="outlined"
+          disabled={treatmentDisabled}
+          title={treatmentDisabled ? 'Lịch đã hoàn thành' : undefined}
+          onClick={(e) => {
+            e.stopPropagation();
+            try {
+              window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: appointment.id } }));
+            }
+            catch (err) { console.warn('app:navigate dispatch failed', err); }
+          }}
+          sx={{ position: 'absolute', bottom: 6, right: 6, minWidth: 0, padding: '4px 6px', fontSize: '0.7rem' }}>
+          Điều trị
+        </Button>
+      )}
       <Typography variant="body2" fontWeight="bold" color={color.text} noWrap>
         {appointment.customerName}
       </Typography>

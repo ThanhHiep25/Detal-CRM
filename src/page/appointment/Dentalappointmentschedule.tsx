@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Typography, CircularProgress, Box, Chip, ToggleButtonGroup, ToggleButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Card, CardContent, Grid, CardActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, TablePagination, Stack } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -8,10 +8,14 @@ import { PickersDay } from '@mui/x-date-pickers';
 import type { PickersDayProps } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { AppointmentDetailModal } from '@/components/appointment/AppointmentDetailModal';
+import { ConsultationDetailModal } from '@/components/appointment/ConsultationDetailModal';
 import { AppointmentAPI, type AppointmentItem } from '@/services/appointments';
 import { DentistAPI, type Dentist } from '@/services/dentist';
+import { ConsultationAPI, type ConsultationItem } from '@/services/consultation-ab';
 import { UserAPI, type UserMe } from '@/services/user';
 import { Table2, TableOfContents } from 'lucide-react';
+
+type DisplayItem = AppointmentItem & { isConsultation?: boolean; consultationId?: number };
 
 export default function DentalAppointmentSchedule() {
     const theme = useTheme();
@@ -19,6 +23,7 @@ export default function DentalAppointmentSchedule() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
+    const [consultations, setConsultations] = useState<ConsultationItem[]>([]);
     // set of YYYY-MM-DD for the current month that have at least one appointment
     const [monthAppointmentDates, setMonthAppointmentDates] = useState<Set<string>>(new Set());
     const [dentist, setDentist] = useState<Dentist | null>(null);
@@ -37,6 +42,7 @@ export default function DentalAppointmentSchedule() {
     const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedAppointmentDetail, setSelectedAppointmentDetail] = useState<AppointmentItem | null>(null);
+    const [selectedConsultation, setSelectedConsultation] = useState<ConsultationItem | null>(null);
     const [viewMode, setViewMode] = useState<'table' | 'card'>(() => 'table');
     // search / filter / pagination
     const [search, setSearch] = useState<string>('');
@@ -45,12 +51,44 @@ export default function DentalAppointmentSchedule() {
     const [rowsPerPage, setRowsPerPage] = useState<number>(10);
 
     const qLower = search.trim().toLowerCase();
-    const filteredAppointments = appointments.filter((a) => {
-        if (statusFilter && ((a.status || '').toString() !== statusFilter)) return false;
-        if (!qLower) return true;
-        const hay = `${a.customerName ?? ''} ${a.customerUsername ?? ''} ${a.customerEmail ?? ''} ${a.label ?? ''} ${a.serviceName ?? ''}`.toLowerCase();
-        return hay.includes(qLower);
-    });
+
+    const displayItems = useMemo(() => {
+        const mapConsultationToDisplay = (c: ConsultationItem): DisplayItem | null => {
+            if (!c.scheduledTime) return null;
+            const d = new Date(c.scheduledTime);
+            if (Number.isNaN(d.getTime())) return null;
+            const key = formatDateLocal(d);
+            if (key !== date) return null;
+            const serviceName = c.service?.name || '';
+            return {
+                id: (Number(c.id) || 0) + 10000000,
+                scheduledTime: c.scheduledTime,
+                status: 'CONSULTATION',
+                customerName: c.customerName || c.customer?.fullName || '',
+                customerEmail: c.customerEmail || undefined,
+                customerUsername: undefined,
+                serviceName: serviceName ? `[Tư vấn] ${serviceName}` : '[Tư vấn]',
+                label: serviceName ? `[Tư vấn] ${serviceName}` : 'Tư vấn',
+                branchName: c.branch?.name,
+                isConsultation: true,
+                consultationId: c.id,
+            } as DisplayItem;
+        };
+
+        const mappedConsultations = consultations.map(mapConsultationToDisplay).filter(Boolean) as DisplayItem[];
+        const mappedAppointments = appointments.map(a => ({ ...a, isConsultation: false } as DisplayItem));
+        return [...mappedAppointments, ...mappedConsultations];
+    }, [appointments, consultations, date]);
+
+    const filteredAppointments = useMemo(() => {
+        return displayItems.filter((a) => {
+            if (statusFilter && ((a.status || '').toString() !== statusFilter)) return false;
+            if (!qLower) return true;
+            const hay = `${a.customerName ?? ''} ${a.customerUsername ?? ''} ${a.customerEmail ?? ''} ${a.label ?? ''} ${a.serviceName ?? ''}`.toLowerCase();
+            return hay.includes(qLower);
+        });
+    }, [displayItems, statusFilter, qLower]);
+
     const filteredCount = filteredAppointments.length;
     const pagedAppointments = filteredAppointments.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
@@ -102,15 +140,34 @@ export default function DentalAppointmentSchedule() {
             if (!dentist) return;
             setDayLoading(true);
             try {
-                const sched = await AppointmentAPI.getDaySchedule(dentist.id, date);
-                const isApiResponse = (v: unknown): v is { success: boolean; data?: unknown } => {
-                    return !!v && typeof v === 'object' && 'success' in (v as Record<string, unknown>);
+                const unwrapArray = (res: unknown): unknown[] => {
+                    if (res && typeof res === 'object' && 'success' in (res as Record<string, unknown>) && Array.isArray((res as Record<string, unknown>).data)) {
+                        return (res as Record<string, unknown>).data as unknown[];
+                    }
+                    if (Array.isArray(res)) return res as unknown[];
+                    return [];
                 };
-                let raw: unknown[] = [];
-                if (isApiResponse(sched)) raw = (sched.data as unknown[]) || [];
-                else if (Array.isArray(sched)) raw = sched as unknown[];
-                const apps: AppointmentItem[] = (raw || []).map((r) => r as AppointmentItem);
-                if (mounted) setAppointments(apps);
+
+                const [sched, consultRes] = await Promise.all([
+                    AppointmentAPI.getDaySchedule(dentist.id, date),
+                    ConsultationAPI.getByDentist(Number(dentist.id)),
+                ]);
+
+                const rawAppointments = unwrapArray(sched);
+                const apps: AppointmentItem[] = (rawAppointments || []).map((r) => r as AppointmentItem);
+
+                const rawConsultations = unwrapArray(consultRes) as ConsultationItem[];
+                const dayConsultations = rawConsultations.filter((c) => {
+                    if (!c.scheduledTime) return false;
+                    const d = new Date(c.scheduledTime);
+                    if (Number.isNaN(d.getTime())) return false;
+                    return formatDateLocal(d) === date;
+                });
+
+                if (mounted) {
+                    setAppointments(apps);
+                    setConsultations(dayConsultations);
+                }
             } catch (err) {
                 console.error(err);
                 if (mounted) setError((err as Error)?.message || 'Lỗi khi tải lịch ngày.');
@@ -138,7 +195,11 @@ export default function DentalAppointmentSchedule() {
                     const dayStr = `${yStr}-${mStr}-${dd}`;
                     dayRequests.push(AppointmentAPI.getDaySchedule(dentist.id, dayStr));
                 }
-                const dayResults = await Promise.all(dayRequests);
+                const [dayResults, consultRes] = await Promise.all([
+                    Promise.all(dayRequests),
+                    ConsultationAPI.getByDentist(Number(dentist.id)),
+                ]);
+
                 const isApiResponse = (v: unknown): v is { success: boolean; data?: unknown } => {
                     return !!v && typeof v === 'object' && 'success' in (v as Record<string, unknown>);
                 };
@@ -152,6 +213,23 @@ export default function DentalAppointmentSchedule() {
                         monthDates.add(`${yStr}-${mStr}-${d}`);
                     }
                 });
+
+                const unwrapArray = (res: unknown): ConsultationItem[] => {
+                    if (res && typeof res === 'object' && 'success' in (res as Record<string, unknown>) && Array.isArray((res as Record<string, unknown>).data)) {
+                        return (res as Record<string, unknown>).data as ConsultationItem[];
+                    }
+                    if (Array.isArray(res)) return res as ConsultationItem[];
+                    return [] as ConsultationItem[];
+                };
+                const consults = unwrapArray(consultRes);
+                consults.forEach((c) => {
+                    if (!c.scheduledTime) return;
+                    const d = new Date(c.scheduledTime);
+                    if (Number.isNaN(d.getTime())) return;
+                    const key = formatDateLocal(d);
+                    if (key.startsWith(monthKey)) monthDates.add(key);
+                });
+
                 if (mounted) setMonthAppointmentDates(monthDates);
             } catch (err) {
                 console.error(err);
@@ -225,6 +303,7 @@ export default function DentalAppointmentSchedule() {
                                 <MenuItem value="CONFIRMED">CONFIRMED</MenuItem>
                                 <MenuItem value="COMPLETED">COMPLETED</MenuItem>
                                 <MenuItem value="CANCELLED">CANCELLED</MenuItem>
+                                <MenuItem value="CONSULTATION">TƯ VẤN</MenuItem>
                             </Select>
                         </FormControl>
 
@@ -252,13 +331,17 @@ export default function DentalAppointmentSchedule() {
                             <span className='h-4 w-4 bg-green-500 rounded-full mr-2'></span>
                             <p>Lịch hẹn từng ngày</p>
                         </div>
+                        <div className="flex items-center ml-4">
+                            <span className='h-4 w-4 bg-purple-500 rounded-full mr-2'></span>
+                            <p>Lịch tư vấn</p>
+                        </div>
                     </div>
 
                     {dayLoading ? (
                         <div className="w-full h-[70vh] flex flex-col items-center justify-center">
                             <CircularProgress />
                         </div>
-                    ) : appointments.length === 0 ? (
+                    ) : displayItems.length === 0 ? (
                         <div className="w-full h-[70vh] flex flex-col items-center justify-center">
                             <img src="/planet.png" alt="planet" className="w-[200px] h-1/3" />
                             <Typography variant="h6" color="text.secondary">Không có lịch hẹn cho ngày đã chọn.</Typography>
@@ -277,21 +360,40 @@ export default function DentalAppointmentSchedule() {
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>
-                                        {pagedAppointments.map((a) => (
-                                            <TableRow key={a.id} hover onClick={() => { setSelectedAppointmentDetail(a); setModalOpen(true); }} style={{ cursor: 'pointer' }}>
-                                                <TableCell>{a.scheduledTime ? new Date(a.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</TableCell>
-                                                <TableCell>{a.customerName ?? a.customerUsername ?? a.customerEmail ?? '-'}</TableCell>
-                                                <TableCell>{a.serviceName ?? '-'}</TableCell>
-                                                <TableCell>{a.status ?? '-'}</TableCell>
-                                                <TableCell align="right">
-                                                    <Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedAppointmentDetail(a); setModalOpen(true); }}>Xem</Button>
-                                                    <Button size="small" variant="contained" color="primary" sx={{ ml: 1 }} onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: a.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); }
-                                                    }}>Điều trị</Button>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
+                                        {pagedAppointments.map((a) => {
+                                            const isConsult = (a as DisplayItem).isConsultation;
+                                            const statusLabel = isConsult ? 'TƯ VẤN' : (a.status ?? '-');
+
+                                            const handleOpenDetail = () => {
+                                                if (isConsult) {
+                                                    const found = consultations.find(c => c.id === (a as DisplayItem).consultationId) || null;
+                                                    setSelectedConsultation(found);
+                                                    setSelectedAppointmentDetail(null);
+                                                } else {
+                                                    setSelectedAppointmentDetail(a as AppointmentItem);
+                                                    setSelectedConsultation(null);
+                                                }
+                                                setModalOpen(true);
+                                            };
+
+                                            return (
+                                                <TableRow key={a.id} hover onClick={handleOpenDetail} style={{ cursor: 'pointer' }}>
+                                                    <TableCell>{a.scheduledTime ? new Date(a.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</TableCell>
+                                                    <TableCell>{a.customerName ?? a.customerUsername ?? a.customerEmail ?? '-'}</TableCell>
+                                                    <TableCell>{a.serviceName ?? '-'}</TableCell>
+                                                    <TableCell>{statusLabel}</TableCell>
+                                                    <TableCell align="right">
+                                                        <Button size="small" onClick={(e) => { e.stopPropagation(); handleOpenDetail(); }}>Xem</Button>
+                                                        {!isConsult && (
+                                                            <Button size="small" variant="contained" color="primary" sx={{ ml: 1 }} onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: a.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); }
+                                                            }}>Điều trị</Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            );
+                                        })}
                                     </TableBody>
                                 </Table>
                                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
@@ -310,11 +412,22 @@ export default function DentalAppointmentSchedule() {
                             <Grid container spacing={2}>
                                 {pagedAppointments.map((a) => (
                                     <Grid item xs={12} sm={6} md={4} key={a.id}>
-                                        <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => { setSelectedAppointmentDetail(a); setModalOpen(true); }}>
+                                        <Card variant="outlined" sx={{ cursor: 'pointer' }} onClick={() => {
+                                            const isConsult = (a as DisplayItem).isConsultation;
+                                            if (isConsult) {
+                                                const found = consultations.find(c => c.id === (a as DisplayItem).consultationId) || null;
+                                                setSelectedConsultation(found);
+                                                setSelectedAppointmentDetail(null);
+                                            } else {
+                                                setSelectedAppointmentDetail(a as AppointmentItem);
+                                                setSelectedConsultation(null);
+                                            }
+                                            setModalOpen(true);
+                                        }}>
                                             <CardContent>
                                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                                                     <Typography variant="subtitle2">{a.label ?? 'Lịch'}</Typography>
-                                                    <Chip label={a.status ?? ''} size="small" />
+                                                    <Chip label={(a as DisplayItem).isConsultation ? 'TƯ VẤN' : (a.status ?? '')} size="small" color={(a as DisplayItem).isConsultation ? 'secondary' : 'default'} />
                                                 </Box>
                                                 <Typography variant="body2" color="text.secondary">{a.serviceName ?? '-'}</Typography>
                                                 <Typography variant="body2" color="text.secondary">{a.branchName ?? '-'}</Typography>
@@ -325,11 +438,25 @@ export default function DentalAppointmentSchedule() {
                                                 </Typography>
                                             </CardContent>
                                             <CardActions>
-                                                <Button size="small" onClick={(e) => { e.stopPropagation(); setSelectedAppointmentDetail(a); setModalOpen(true); }}>Chi tiết</Button>
-                                                <Button size="small" variant="contained" color="primary" onClick={(e) => {
+                                                <Button size="small" onClick={(e) => {
                                                     e.stopPropagation();
-                                                    try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: a.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); }
-                                                }}>Điều trị</Button>
+                                                    const isConsult = (a as DisplayItem).isConsultation;
+                                                    if (isConsult) {
+                                                        const found = consultations.find(c => c.id === (a as DisplayItem).consultationId) || null;
+                                                        setSelectedConsultation(found);
+                                                        setSelectedAppointmentDetail(null);
+                                                    } else {
+                                                        setSelectedAppointmentDetail(a as AppointmentItem);
+                                                        setSelectedConsultation(null);
+                                                    }
+                                                    setModalOpen(true);
+                                                }}>Chi tiết</Button>
+                                                {!(a as DisplayItem).isConsultation && (
+                                                    <Button size="small" variant="contained" color="primary" onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: a.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); }
+                                                    }}>Điều trị</Button>
+                                                )}
                                             </CardActions>
                                         </Card>
                                     </Grid>
@@ -351,7 +478,11 @@ export default function DentalAppointmentSchedule() {
                 </Box>
             </Box>
 
-            <AppointmentDetailModal open={modalOpen} onClose={() => { setModalOpen(false); setSelectedAppointmentDetail(null); }} appointment={selectedAppointmentDetail} fullScreen={isSmall} />
+            {selectedConsultation ? (
+                <ConsultationDetailModal open={modalOpen} onClose={() => { setModalOpen(false); setSelectedConsultation(null); }} consultation={selectedConsultation} />
+            ) : (
+                <AppointmentDetailModal open={modalOpen} onClose={() => { setModalOpen(false); setSelectedAppointmentDetail(null); }} appointment={selectedAppointmentDetail} fullScreen={isSmall} />
+            )}
         </div>
     );
 }

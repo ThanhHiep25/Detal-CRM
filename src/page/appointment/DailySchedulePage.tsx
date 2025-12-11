@@ -8,8 +8,10 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import { AppointmentCard } from '@/components/appointment/AppointmentCard';
 import { AppointmentDetailModal } from '@/components/appointment/AppointmentDetailModal';
+import { ConsultationDetailModal } from '@/components/appointment/ConsultationDetailModal';
 import type { AppointmentItem } from '@/services/appointments';
 import { AppointmentAPI } from '@/services/appointments';
+import { ConsultationAPI, type ConsultationItem } from '@/services/consultation-ab';
 import { DentistAPI } from '@/services/dentist';
 import { ServiceAPI } from '@/services/service';
 import { UserAPI } from '@/services/user';
@@ -76,7 +78,9 @@ export function DailySchedulePage() {
   // --- STATE MANAGEMENT ---
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<DataAppointment[]>([]);
+  const [consultations, setConsultations] = useState<DataAppointment[]>([]);
   const [rawById, setRawById] = useState<Record<number, unknown>>({});
+  const [consultationRawById, setConsultationRawById] = useState<Record<number, unknown>>({});
   const [doctors, setDoctors] = useState<LocalDoctor[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(() => {
     const t = new Date();
@@ -87,6 +91,7 @@ export function DailySchedulePage() {
   });
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<DataAppointment | AppointmentItem | null>(null);
+  const [selectedConsultation, setSelectedConsultation] = useState<ConsultationItem | null>(null);
   const [pickerAnchor, setPickerAnchor] = useState<HTMLElement | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -135,13 +140,22 @@ export function DailySchedulePage() {
         const userMap = new Map<number | string, string>();
         userList.forEach((u) => { if (u && u.id != null) userMap.set(u.id, u.fullName || u.username || u.email || ''); });
 
-        // Fetch all appointments and filter by scheduledTime for the selected date
+        // Fetch all appointments and consultations, then filter by scheduledTime for the selected date
         let rawApps: unknown[] = [];
         const appsRes: unknown = await AppointmentAPI.getAll();
         if (appsRes && typeof appsRes === 'object' && 'success' in (appsRes as Record<string, unknown>) && Array.isArray((appsRes as Record<string, unknown>).data)) {
           rawApps = (appsRes as Record<string, unknown>).data as unknown[];
         } else if (Array.isArray(appsRes)) {
           rawApps = appsRes as unknown[];
+        }
+
+        // Fetch consultations
+        let rawConsultations: unknown[] = [];
+        const consultRes: unknown = await ConsultationAPI.getAll();
+        if (consultRes && typeof consultRes === 'object' && 'success' in (consultRes as Record<string, unknown>) && Array.isArray((consultRes as Record<string, unknown>).data)) {
+          rawConsultations = (consultRes as Record<string, unknown>).data as unknown[];
+        } else if (Array.isArray(consultRes)) {
+          rawConsultations = consultRes as unknown[];
         }
 
         // dateStr passed in is YYYY-MM-DD already
@@ -215,9 +229,76 @@ export function DailySchedulePage() {
             return item;
           });
 
+        // Map consultations to DataAppointment format (use consultation.status when available)
+        const consultationRawMap: Record<number, unknown> = {};
+        const mappedConsultations: DataAppointment[] = rawConsultations
+          .filter(hasScheduledTime)
+          .filter((c) => {
+            try {
+              const sched = (c as Record<string, unknown>).scheduledTime;
+              const d = new Date(String(sched));
+              if (Number.isNaN(d.getTime())) return false;
+              const yyyy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, '0');
+              const dd = String(d.getDate()).padStart(2, '0');
+              const dStr = `${yyyy}-${mm}-${dd}`;
+              return dStr === dateStr;
+            } catch {
+              return false;
+            }
+          })
+          .map((c: Record<string, unknown>) => {
+            const sched = c.scheduledTime;
+            const d = new Date(String(sched));
+            const startH = String(d.getHours()).padStart(2, '0');
+            const startM = String(d.getMinutes()).padStart(2, '0');
+            const startTime = `${startH}:${startM}`;
+            const duration = typeof c.durationMinutes === 'number' && c.durationMinutes > 0 ? c.durationMinutes : 30;
+            const endDate = new Date(d.getTime() + (Number(duration) || 30) * 60000);
+            const endH = String(endDate.getHours()).padStart(2, '0');
+            const endM = String(endDate.getMinutes()).padStart(2, '0');
+            const endTime = `${endH}:${endM}`;
+
+            const doctorId = c['dentistId'] ?? ((c['dentist'] as Record<string, unknown> | undefined)?.['id']) ?? null;
+
+            // Map consultation.status (API: PENDING/CONFIRMED/CANCELLED/COMPLETED) to local appointment status strings
+            const rawStatus = ((c['status'] as string) || '').toString().toLowerCase();
+            const status = rawStatus.includes('pending') ? 'pending' : rawStatus.includes('confirm') ? 'confirmed' : rawStatus.includes('complete') ? 'completed' : rawStatus.includes('cancel') ? 'cancelled' : 'confirmed';
+
+            let customerName = (c['customerName'] as string) || '';
+            const custId = c['customerId'];
+            if (!customerName && custId != null && userMap.has(Number(custId))) {
+              customerName = userMap.get(Number(custId)) || customerName;
+            }
+
+            let serviceName = (c['serviceName'] as string) || ((c['service'] as Record<string, unknown>) && (c['service'] as Record<string, unknown>)['name'] as string) || '';
+            const svcId = c['serviceId'] ?? ((c['service'] as Record<string, unknown>) && (c['service'] as Record<string, unknown>)['id']);
+            if (!serviceName && svcId != null && serviceMap.has(Number(svcId))) {
+              serviceName = serviceMap.get(Number(svcId)) || serviceName;
+            }
+
+            // Add prefix to differentiate from appointments
+            const idVal = Number(c.id) || Math.floor(Math.random() * 1000000000);
+            const consultationId = idVal + 10000000; // offset to avoid id collision
+            
+            const item = {
+              id: consultationId,
+              doctorId: doctorId ? Number(doctorId) : (dentistList.length ? Number(dentistList[0].id) : 0),
+              customerName,
+              service: serviceName ? `[Tư vấn] ${serviceName}` : '[Tư vấn]', // Prefix with consultation label
+              startTime,
+              endTime,
+              status,
+            } as DataAppointment;
+            consultationRawMap[consultationId] = c;
+            return item;
+          });
+
         setDoctors(dentistList.map(d => ({ id: Number(d.id || 0), name: d.name || 'Bác sĩ' })));
         setAppointments(mappedApps);
+        setConsultations(mappedConsultations);
         setRawById(rawMap);
+        setConsultationRawById(consultationRawMap);
       } catch (err) {
         console.error('Lỗi khi tải dữ liệu lịch:', err);
       } finally {
@@ -257,14 +338,98 @@ export function DailySchedulePage() {
   // --- DATA PROCESSING (OPTIMIZATION) ---
   const appointmentsByDoctor = useMemo(() => {
     const grouped: { [key: number]: DataAppointment[] } = {};
-    appointments.forEach(apt => {
+    // Combine appointments and consultations
+    const allItems = [...appointments, ...consultations];
+    allItems.forEach(apt => {
       if (!grouped[apt.doctorId]) {
         grouped[apt.doctorId] = [];
       }
       grouped[apt.doctorId].push(apt);
     });
+    // Sort by start time
+    Object.keys(grouped).forEach(key => {
+      grouped[Number(key)].sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+    });
     return grouped;
-  }, [appointments]); // Chỉ tính toán lại khi danh sách appointments thay đổi
+  }, [appointments, consultations]); // Chỉ tính toán lại khi danh sách appointments hoặc consultations thay đổi
+
+  // Compute horizontal layout for overlapping items per doctor
+  const layoutByDoctor = useMemo(() => {
+    const result: Record<number, Record<number, { leftPercent: number; widthPercent: number }>> = {};
+    Object.keys(appointmentsByDoctor).forEach((key) => {
+      const docId = Number(key);
+      const list = appointmentsByDoctor[docId] || [];
+      // convert to intervals with numeric minutes
+      const intervals = list.map((it) => ({
+        id: it.id,
+        start: timeToMinutes(it.startTime),
+        end: timeToMinutes(it.endTime) || (timeToMinutes(it.startTime) + 30)
+      }));
+
+      // build continuous overlap groups
+      const groups: Array<typeof intervals> = [];
+      let currentGroup: typeof intervals = [];
+      let groupEnd = -1;
+      for (const iv of intervals) {
+        if (currentGroup.length === 0) {
+          currentGroup.push(iv);
+          groupEnd = iv.end;
+        } else {
+          if (iv.start < groupEnd) {
+            currentGroup.push(iv);
+            groupEnd = Math.max(groupEnd, iv.end);
+          } else {
+            groups.push(currentGroup);
+            currentGroup = [iv];
+            groupEnd = iv.end;
+          }
+        }
+      }
+      if (currentGroup.length) groups.push(currentGroup);
+
+      const mapping: Record<number, { leftPercent: number; widthPercent: number }> = {};
+
+      // For each group, assign columns
+      for (const group of groups) {
+        // columns store end time for each column
+        const columnsEnd: number[] = [];
+        const assigned: Array<{ id: number; col: number }> = [];
+        // ensure group is sorted by start
+        group.sort((a, b) => a.start - b.start);
+        for (const ev of group) {
+          let placed = false;
+          for (let i = 0; i < columnsEnd.length; i++) {
+            if (ev.start >= columnsEnd[i]) {
+              // place in this column
+              assigned.push({ id: ev.id, col: i });
+              columnsEnd[i] = ev.end;
+              placed = true;
+              break;
+            }
+          }
+          if (!placed) {
+            columnsEnd.push(ev.end);
+            assigned.push({ id: ev.id, col: columnsEnd.length - 1 });
+          }
+        }
+
+        const totalCols = Math.max(1, columnsEnd.length);
+        // horizontal spacing
+        const gap = 2; // percent gap between columns
+        const totalGap = gap * (totalCols + 1);
+        const available = Math.max(0, 100 - totalGap);
+        const colWidth = available / totalCols;
+
+        for (const a of assigned) {
+          const left = gap + a.col * (colWidth + gap);
+          mapping[a.id] = { leftPercent: left, widthPercent: colWidth };
+        }
+      }
+
+      result[docId] = mapping;
+    });
+    return result;
+  }, [appointmentsByDoctor]);
 
   // --- Current time indicator (for today's date) ---
   // Now indicator is handled by the NowIndicator child component to avoid
@@ -272,8 +437,17 @@ export function DailySchedulePage() {
 
   // --- CÁC HÀM XỬ LÝ SỰ KIỆN ---
   const handleAppointmentClick = (appointment: DataAppointment) => {
-    const raw = rawById[appointment.id] as AppointmentItem | undefined;
-    setSelectedAppointment(raw ?? appointment);
+    // Check if it's a consultation (id >= 10000000)
+    const isConsultation = appointment.id >= 10000000;
+    if (isConsultation) {
+      const raw = consultationRawById[appointment.id] as ConsultationItem | undefined;
+      setSelectedConsultation(raw ?? null);
+      setSelectedAppointment(null);
+    } else {
+      const raw = rawById[appointment.id] as AppointmentItem | undefined;
+      setSelectedAppointment(raw ?? appointment);
+      setSelectedConsultation(null);
+    }
     setModalOpen(true);
   };
 
@@ -282,6 +456,7 @@ export function DailySchedulePage() {
   const handleCloseModal = () => {
     setModalOpen(false);
     setSelectedAppointment(null);
+    setSelectedConsultation(null);
   };
 
   // Editing/saving appointments removed — schedule is read-only in this page.
@@ -400,7 +575,16 @@ export function DailySchedulePage() {
                                 <ListItemText primary={`${apt.startTime} — ${apt.customerName || 'Khách hàng'}`} secondary={apt.service} />
                               </ListItemButton>
                               <div style={{ paddingRight: 8 }}>
-                                <Button size="small" variant="contained" onClick={(e) => { e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: apt.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); } }}>Điều trị</Button>
+                                {(() => {
+                                  const isConsultation = Number(apt.id) >= 10000000;
+                                  const isCompleted = String(apt.status || '').toLowerCase().includes('complete');
+                                  if (isConsultation) return null;
+                                  return (
+                                    <Button size="small" variant="contained" disabled={isCompleted} onClick={(e) => { e.stopPropagation(); try { window.dispatchEvent(new CustomEvent('app:navigate', { detail: { page: 'prescription', appointmentId: apt.id } })); } catch (err) { console.warn('app:navigate dispatch failed', err); } }} title={isCompleted ? 'Lịch đã hoàn thành' : undefined}>
+                                      {isCompleted ? 'Đã hoàn thành' : 'Điều trị'}
+                                    </Button>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </ListItem>
@@ -441,16 +625,33 @@ export function DailySchedulePage() {
                       <div key={`${doctor.id}-${time}`} className="h-[80px] border-b border-dashed border-gray-200 px-1" />
                     ))}
 
-                    {/* Appointments */}
+                    {/* Appointments and Consultations */}
                     {(appointmentsByDoctor[doctor.id] || []).map(apt => {
                       // Add header offset (HOUR_HEIGHT) so 07:00 aligns with the first hour row under the header
                       const top = HOUR_HEIGHT + (timeToMinutes(apt.startTime) - dayStartMinutes) * PIXELS_PER_MINUTE;
                       const height = (timeToMinutes(apt.endTime) - timeToMinutes(apt.startTime)) * PIXELS_PER_MINUTE;
                       const finalHeight = Math.max(height, 0);
 
+                      // Check if it's a consultation to apply purple color
+                      const isConsultation = apt.id >= 10000000;
+                      const consultationColor = isConsultation ? {
+                        main: '#a855f7',
+                        light: '#f3e8ff',
+                        text: '#6b21a8'
+                      } : undefined;
+
+                      const layout = (layoutByDoctor[doctor.id] || {})[apt.id];
                       return (
                         <div key={apt.id} onClick={(e) => { e.stopPropagation(); handleAppointmentClick(apt); }}>
-                          <AppointmentCard appointment={apt} top={top} height={finalHeight} />
+                          <AppointmentCard 
+                            appointment={apt} 
+                            top={top} 
+                            height={finalHeight}
+                            customColor={consultationColor}
+                            leftPercent={layout?.leftPercent}
+                            widthPercent={layout?.widthPercent}
+                            showTreatment={!isConsultation}
+                          />
                         </div>
                       );
                     })}
@@ -463,7 +664,19 @@ export function DailySchedulePage() {
       </div>
 
       {/* Modal */}
-      <AppointmentDetailModal open={modalOpen} onClose={handleCloseModal} appointment={selectedAppointment} />
+      {selectedConsultation ? (
+        <ConsultationDetailModal 
+          open={modalOpen} 
+          onClose={handleCloseModal} 
+          consultation={selectedConsultation}
+        />
+      ) : (
+        <AppointmentDetailModal 
+          open={modalOpen} 
+          onClose={handleCloseModal} 
+          appointment={selectedAppointment} 
+        />
+      )}
     </main>
   );
 }
@@ -486,7 +699,11 @@ function Legend() {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-blue-500/30" />
-            <span className="text-sm">Đã xác nhận</span>
+            <span className="text-sm">Lịch hẹn</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-purple-500/30" />
+            <span className="text-sm">Lịch tư vấn</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-green-500/30" />
