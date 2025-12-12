@@ -27,6 +27,10 @@ export function CustomerFormPage() {
     const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
+    // inline validation errors
+    const [fullNameError, setFullNameError] = useState<string | null>(null);
+    const [emailError, setEmailError] = useState<string | null>(null);
+    const [phoneError, setPhoneError] = useState<string | null>(null);
     const [birthDate, setBirthDate] = useState('');
     const [gender, setGender] = useState<string>('');
     const [sourceDetail, setSourceDetail] = useState('');
@@ -54,8 +58,10 @@ export function CustomerFormPage() {
     const [schedulerPayload, setSchedulerPayload] = useState<Record<string, unknown> | null>(null);
 
     // validation helpers
-    // phone must start with 0 and contain only digits (assumption: 9-12 digits total)
-    const phoneRegex = /^0\d{8,11}$/;
+    // phone must start with 0 and contain only digits (exactly 10 digits)
+    const phoneRegex = /^0\d{9}$/;
+    // name: only letters and spaces (use Unicode property, fallback used in validateName)
+    const nameRegexUnicodeSafe = (() => { try { return new RegExp('^[\\p{L}\\s]+$','u'); } catch { return null; } })();
     const isAtLeastAge = (dateStr: string, age: number) => {
         if (!dateStr) return false;
         const bd = new Date(dateStr);
@@ -133,11 +139,71 @@ export function CustomerFormPage() {
                     <Grid item xs={12} md={9}>
                         <Grid container spacing={2}>
                             <Grid item xs={12} md={4}><FormControl><RadioGroup row value={gender} onChange={(e) => setGender(e.target.value)}><FormControlLabel value="male" control={<Radio />} label="Nam" /><FormControlLabel value="female" control={<Radio />} label="Nữ" /><FormControlLabel value="other" control={<Radio />} label="Khác" /></RadioGroup></FormControl></Grid>
-                            <Grid item xs={12} md={4}><TextField fullWidth label="Họ và tên" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={fullName} onChange={(e) => setFullName(e.target.value)} /></Grid>
                             <Grid item xs={12} md={4}><FormControlLabel control={<Checkbox checked={showScheduler} onChange={(e) => setShowScheduler(e.target.checked)}/>} label="Tạo lịch hẹn"/></Grid>
                             <Grid item xs={12} md={4}><TextField type="date" fullWidth label="Ngày sinh" placeholder="yyyy-mm-dd" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={birthDate} onChange={(e) => setBirthDate(e.target.value)} /></Grid>
-                            <Grid item xs={12} md={4}><TextField fullWidth label="Số điện thoại" required variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={phone} onChange={(e) => setPhone(e.target.value)} /></Grid>
-                            <Grid item xs={12} md={4}><TextField fullWidth label="Email" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={email} onChange={(e) => setEmail(e.target.value)} /></Grid>
+                            <Grid item xs={12} md={4}><TextField
+                                fullWidth
+                                label="Họ và tên"
+                                variant="filled"
+                                sx={inputStyles}
+                                InputLabelProps={{ shrink: true }}
+                                value={fullName}
+                                onChange={(e) => { setFullName(e.target.value); if (fullNameError) setFullNameError(null); }}
+                                onBlur={() => {
+                                    // validate name: no special characters
+                                    const val = fullName.trim();
+                                    if (!val) { setFullNameError('Vui lòng nhập họ và tên'); return; }
+                                    try {
+                                        if (nameRegexUnicodeSafe) {
+                                            if (!nameRegexUnicodeSafe.test(val)) setFullNameError('Tên không được chứa ký tự đặc biệt và số ');
+                                            else setFullNameError(null);
+                                        } else {
+                                            const fallback = /^[A-Za-z\s.-]+$/;
+                                            if (!fallback.test(val)) setFullNameError('Tên không được chứa ký tự đặc biệt');
+                                            else setFullNameError(null);
+                                        }
+                                    } catch {
+                                        setFullNameError(null);
+                                    }
+                                }}
+                                error={!!fullNameError}
+                                helperText={fullNameError || ''}
+                            /></Grid>
+                            <Grid item xs={12} md={4}><TextField
+                                fullWidth
+                                label="Số điện thoại"
+                                required
+                                variant="filled"
+                                sx={inputStyles}
+                                InputLabelProps={{ shrink: true }}
+                                value={phone}
+                                onChange={(e) => { setPhone(e.target.value); if (phoneError) setPhoneError(null); }}
+                                onBlur={() => {
+                                    const val = phone.trim();
+                                    if (!val) { setPhoneError(null); return; }
+                                    if (!phoneRegex.test(val)) setPhoneError('Số điện thoại phải bắt đầu bằng 0 và có 10 chữ số');
+                                    else setPhoneError(null);
+                                }}
+                                error={!!phoneError}
+                                helperText={phoneError || ''}
+                            /></Grid>
+                            <Grid item xs={12} md={4}><TextField
+                                fullWidth
+                                label="Email"
+                                variant="filled"
+                                sx={inputStyles}
+                                InputLabelProps={{ shrink: true }}
+                                value={email}
+                                onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(null); }}
+                                onBlur={() => {
+                                    const val = email.trim();
+                                    if (!val) { setEmailError(null); return; }
+                                    if (!/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(val)) setEmailError('Email phải là địa chỉ @gmail.com');
+                                    else setEmailError(null);
+                                }}
+                                error={!!emailError}
+                                helperText={emailError || ''}
+                            /></Grid>
                             <Grid item xs={12} md={4}><TextField fullWidth label="Người liên hệ khẩn cấp" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)} /></Grid>
                             <Grid item xs={12} md={4}>
                                 <FormControl fullWidth variant="filled" sx={inputStyles}>
@@ -234,10 +300,27 @@ export function CustomerFormPage() {
                         <Button variant="contained" disableElevation sx={{ textTransform: 'none', borderRadius: '8px' }} disabled={saving} onClick={async () => {
                             // minimal validation
                             if (!fullName.trim()) { toast.error('Vui lòng nhập họ và tên'); return; }
+                            // validate name (no special chars)
+                            try {
+                                if (nameRegexUnicodeSafe) {
+                                    if (!nameRegexUnicodeSafe.test(fullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
+                                } else {
+                                    const fallback = /^[A-Za-z\s.-]+$/;
+                                    if (!fallback.test(fullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
+                                }
+                            } catch {
+                                // ignore and continue
+                            }
+
                             if (!phone.trim() && !email.trim()) { toast.error('Vui lòng nhập số điện thoại hoặc email'); return; }
-                            // phone format: must start with 0 and contain only digits (we require 9-12 digits total)
+                            // phone format: must start with 0 and contain only digits (we require exactly 10 digits)
                             if (phone.trim() && !phoneRegex.test(phone.trim())) {
-                                toast.error('Số điện thoại không hợp lệ — phải bắt đầu bằng 0 và chỉ chứa chữ số (ví dụ: 0xxxxxxxx)');
+                                toast.error('Số điện thoại không hợp lệ — phải bắt đầu bằng 0 và có 10 chữ số');
+                                return;
+                            }
+                            // email must be @gmail.com when provided
+                            if (email.trim() && !/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(email.trim())) {
+                                toast.error('Email phải là địa chỉ @gmail.com');
                                 return;
                             }
                             // birthdate: if provided, customer must be at least 18 years old

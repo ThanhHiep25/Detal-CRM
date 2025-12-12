@@ -49,6 +49,7 @@ export function PersonalProfilePage() {
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
+  const [dob, setDob] = useState<string>('');
   const [specialization, setSpecialization] = useState<string>('');
   const [bio, setBio] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -146,20 +147,32 @@ export function PersonalProfilePage() {
   };
 
   const regex = {
-    uid: /^\d{1,8}$/,
     email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
     phone: /^0\d{9}$/ // phone must start with 0 and have exactly 10 digits
   };
 
   const validate = (): string | null => {
-  
+
+    // name must not be empty and must not contain special characters or digits
+    const nameRegex = /^[A-Za-zÀ-ÖØ-öø-ÿ\s'-]+$/;
     if (!name.trim()) return 'Tên không được để trống';
+    if (!nameRegex.test(name.trim())) return 'Tên không được chứa ký tự đặc biệt hoặc số';
+
     if (!email.trim()) return 'Email không được để trống';
     if (!regex.email.test(email)) return 'Email không đúng định dạng';
     if (!phone.trim()) return 'Số điện thoại không được để trống';
     if (!regex.phone.test(phone)) return 'SĐT phải bắt đầu bằng 0 và có đúng 10 chữ số';
     if (!specialization.trim()) return 'Chuyên môn không được để trống';
     if (!bio.trim()) return 'Mô tả không được để trống';
+
+    // DOB must be provided and age >= 18
+    if (!dob) return 'Vui lòng chọn ngày sinh';
+    const born = new Date(dob);
+    if (Number.isNaN(born.getTime())) return 'Ngày sinh không hợp lệ';
+    const today = new Date();
+    const age = today.getFullYear() - born.getFullYear() - (today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate()) ? 1 : 0);
+    if (age < 18) return 'Tuổi phải từ 18 trở lên';
+
     return null;
   };
 
@@ -193,15 +206,14 @@ export function PersonalProfilePage() {
         setName('');
         setEmail('');
         setPhone('');
+        setDob('');
         setSelectedBranches([]);
         setSelectedDepartment('');
         setAllBranches(false);
       } else {
         // log full response for debugging
         console.error('addDentist failed response:', res);
-        if (res.message === `User not found: ${uid}`) {
-          toast.error('UID không tồn tại trong hệ thống');
-        } else if (res.message === 'Access Denied') {
+        if (res.message === 'Access Denied') {
           toast.error('Bạn không có quyền thực hiện hành động này');
         } else {
           toast.error(res.message || 'Thêm nhân viên thất bại');
@@ -220,6 +232,7 @@ export function PersonalProfilePage() {
     setName('');
     setEmail('');
     setPhone('');
+    setDob('');
     setSelectedBranches([]);
     setSelectedDepartment('');
     setAllBranches(false);
@@ -284,6 +297,7 @@ export function PersonalProfilePage() {
                     displayEmpty
                     value={uid || ''}
                     onChange={(e) => setUid(String(e.target.value))}
+                    inputProps={{ 'aria-label': 'Without label' }}
                   >
                     <MenuItem value=""><em>{usersLoading ? 'Đang tải...' : 'Chọn người dùng'}</em></MenuItem>
                     {users.map(u => (
@@ -295,10 +309,18 @@ export function PersonalProfilePage() {
                 </FormControl>
               </Grid>
               <Grid item xs={12} md={4}>
-                <TextField fullWidth 
-                label="Ngày sinh" 
-                type="date" 
-                placeholder="eg. dd-mm-yyyy" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} /></Grid>
+                <TextField
+                  fullWidth
+                  label="Ngày sinh"
+                  type="date"
+                  placeholder="eg. dd-mm-yyyy"
+                  variant="filled"
+                  sx={inputStyles}
+                  InputLabelProps={{ shrink: true }}
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                />
+              </Grid>
               
               <Grid item xs={12} md={4}>
                 <TextField

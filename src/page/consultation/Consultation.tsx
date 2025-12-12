@@ -34,15 +34,19 @@ import {
   Grid,
   Divider
 } from '@mui/material';
+import Tooltip from '@mui/material/Tooltip';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PersonIcon from '@mui/icons-material/Person';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
+import SendIcon from '@mui/icons-material/Send';
+import ReplayIcon from '@mui/icons-material/Replay';
 import { ConsultationAPI, type ConsultationItem, type ConsultationPayload, type ConsultationStatus } from '../../services/consultation-ab';
 import { DentistAPI, type Dentist } from '../../services/dentist';
 import { ServiceAPI, type ServiceItem } from '../../services/service';
@@ -104,6 +108,11 @@ export default function Consultation() {
   // Delete confirmation dialog
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [sendingReminder, setSendingReminder] = useState<Record<number, boolean>>({});
+  // loading states
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState<Record<number, boolean>>({});
 
   // Lookup data
   const [dentists, setDentists] = useState<Dentist[]>([]);
@@ -381,6 +390,7 @@ export default function Consultation() {
       durationMinutes: formData.durationMinutes || null
     };
 
+    setSaveLoading(true);
     try {
       let res;
       if (editMode && editItem) {
@@ -398,6 +408,9 @@ export default function Consultation() {
       }
     } catch (e) {
       toast.error((e as Error)?.message || 'Lỗi khi lưu dữ liệu');
+    }
+    finally {
+      setSaveLoading(false);
     }
   };
 
@@ -419,6 +432,7 @@ export default function Consultation() {
   const doDelete = async () => {
     if (!deleteTargetId) return;
     setDeleteConfirmOpen(false);
+    setDeleteLoading(true);
     try {
       const res = await ConsultationAPI.delete(deleteTargetId);
       if (res && res.success) {
@@ -431,37 +445,66 @@ export default function Consultation() {
       toast.error((e as Error)?.message || 'Xóa thất bại');
     } finally {
       setDeleteTargetId(null);
+      setDeleteLoading(false);
     }
   };
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case 'PENDING':
-        return '#fbbf24'; // amber
-      case 'CONFIRMED':
-        return '#60a5fa'; // blue
-      case 'COMPLETED':
-        return '#4ade80'; // green
-      case 'CANCELLED':
-        return '#ef4444'; // red
-      default:
-        return '#6b7280'; // gray
+  const handleChangeStatus = async (id: number, action: string) => {
+    setStatusLoading(prev => ({ ...prev, [id]: true }));
+    const mapActionToStatus: Record<string, string> = {
+      confirm: 'CONFIRMED',
+      complete: 'COMPLETED',
+      pending: 'PENDING',
+      cancel: 'CANCELLED'
+    };
+    const status = mapActionToStatus[action] as ConsultationStatus | undefined;
+    if (!status) return;
+    try {
+      const res = await ConsultationAPI.setStatus(id, status as ConsultationStatus);
+      if (res && res.success) {
+        toast.success('Cập nhật trạng thái thành công');
+        await loadConsultations();
+      } else {
+        toast.error(res?.message || 'Cập nhật trạng thái thất bại');
+      }
+    } catch (e) {
+      toast.error((e as Error)?.message || 'Lỗi khi cập nhật trạng thái');
     }
+    finally {
+      setStatusLoading(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleSendReminder = async (it: ConsultationItem) => {
+    const to = it.customerEmail || it.customer?.email || '';
+    if (!to) {
+      toast.warn('Không có email khách hàng để gửi nhắc.');
+      return;
+    }
+    setSendingReminder(prev => ({ ...prev, [it.id]: true }));
+    try {
+      // No backend endpoint for consultation reminders; simulate a quick send for UX parity
+      await new Promise((res) => setTimeout(res, 500));
+      toast.success('Đã gửi nhắc thành công (giả lập)');
+    } catch {
+      toast.error('Gửi nhắc thất bại');
+    } finally {
+      setSendingReminder(prev => ({ ...prev, [it.id]: false }));
+    }
+  };
+
+  const getStatusVariant = (status?: string) => {
+    const s = (status || '').toString().toLowerCase();
+    if (s === 'confirmed') return 'success' as const;
+    if (s === 'pending') return 'warning' as const;
+    if (s === 'cancelled') return 'default' as const;
+    if (s === 'completed' || s === 'complete') return 'info' as const;
+    return 'default' as const;
   };
 
   const getStatusLabel = (status?: string) => {
-    switch (status) {
-      case 'PENDING':
-        return 'Chờ xử lý';
-      case 'CONFIRMED':
-        return 'Xác nhận';
-      case 'COMPLETED':
-        return 'Hoàn thành';
-      case 'CANCELLED':
-        return 'Hủy';
-      default:
-        return 'Không xác định';
-    }
+    if (!status) return 'UNKNOWN';
+    return status.toString().toUpperCase();
   };
 
   return (
@@ -698,38 +741,52 @@ export default function Consultation() {
                     <Typography variant="caption">
                       <strong>Thời lượng:</strong> {it.durationMinutes ? `${it.durationMinutes} phút` : 'Chưa xác định'}
                     </Typography>
-                    <Box sx={{ mt: 1 }}>
-                      <Chip 
-                        label={getStatusLabel(it.status)}
-                        size="small"
-                        sx={{ 
-                          bgcolor: getStatusColor(it.status),
-                          color: 'white',
-                          fontWeight: 500
-                        }}
-                      />
-                    </Box>
+                      <Box sx={{ mt: 1 }}>
+                        <Chip
+                          label={getStatusLabel(it.status)}
+                          size="small"
+                          color={getStatusVariant(it.status)}
+                          sx={{ fontWeight: 500 }}
+                        />
+                      </Box>
                   </Stack>
                 </CardContent>
                 <CardActions sx={{ justifyContent: 'flex-end' }}>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditDialog(it);
-                    }}
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(it.id);
-                    }}
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
+                  <Stack direction="row" spacing={0.5}>
+                    {((it.status || '').toString().toLowerCase() === 'pending') && (
+                      <Tooltip title="Xác nhận">
+                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'confirm'); }} disabled={!!statusLoading[it.id]}>
+                          {statusLoading[it.id] ? <CircularProgress size={16} /> : <CheckCircleOutlineIcon fontSize="small" color="success" />}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {((it.status || '').toString().toLowerCase() === 'confirmed') && (
+                      <>
+                        <Tooltip title="Hoàn thành">
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'complete'); }} disabled={!!statusLoading[it.id]}>
+                            {statusLoading[it.id] ? <CircularProgress size={16} /> : <DoneAllIcon fontSize="small" color="primary" />}
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title={sendingReminder[it.id] ? 'Đang gửi...' : 'Gửi nhắc'}>
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSendReminder(it); }} disabled={!!sendingReminder[it.id]}>
+                            {sendingReminder[it.id] ? <CircularProgress size={16} /> : <SendIcon fontSize="small" />}
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
+
+                    {(it.status && (it.status || '').toString().toLowerCase() !== 'pending') && (
+                      <Tooltip title="Đặt lại PENDING">
+                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'pending'); }} disabled={!!statusLoading[it.id]}>
+                          {statusLoading[it.id] ? <CircularProgress size={16} /> : <ReplayIcon fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEditDialog(it); }}><EditIcon fontSize="small" /></IconButton>
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDelete(it.id); }}><DeleteIcon fontSize="small" /></IconButton>
+                  </Stack>
                 </CardActions>
               </Card>
             ))}
@@ -791,48 +848,60 @@ export default function Consultation() {
                         </TableCell>
                         <TableCell>{it.durationMinutes} phút</TableCell>
                         <TableCell>
-                          <Chip 
+                          <Chip
                             label={getStatusLabel(it.status)}
                             size="small"
-                            sx={{ 
-                              bgcolor: getStatusColor(it.status),
-                              color: 'white',
-                              fontWeight: 500
-                            }}
+                            color={getStatusVariant(it.status)}
+                            sx={{ fontWeight: 500 }}
                           />
                         </TableCell>
                         <TableCell align="right">
-                          <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDetailView(it);
-                              }}
-                              title="Xem chi tiết"
-                            >
-                              <VisibilityIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditDialog(it);
-                              }}
-                              title="Chỉnh sửa"
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                            <IconButton
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(it.id);
-                              }}
-                              title="Xóa"
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                          <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
+                            {(() => {
+                              const _s = (it.status || '').toString().toLowerCase();
+                              return _s !== 'complete' && _s !== 'completed';
+                            })() && (
+                              <>
+                                {((it.status || '').toString().toLowerCase() === 'pending') && (
+                                  <Tooltip title="Xác nhận">
+                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'confirm'); }} disabled={!!statusLoading[it.id]}>
+                                      {statusLoading[it.id] ? <CircularProgress size={16} /> : <CheckCircleOutlineIcon fontSize="small" color="success" />}
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+
+                                {((it.status || '').toString().toLowerCase() === 'confirmed') && (
+                                  <>
+                                    <Tooltip title="Hoàn thành">
+                                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'complete'); }} disabled={!!statusLoading[it.id]}>
+                                        {statusLoading[it.id] ? <CircularProgress size={16} /> : <DoneAllIcon fontSize="small" color="primary" />}
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title={sendingReminder[it.id] ? 'Đang gửi...' : 'Gửi nhắc'}>
+                                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSendReminder(it); }} disabled={!!sendingReminder[it.id]}>
+                                        {sendingReminder[it.id] ? <CircularProgress size={16} /> : <SendIcon fontSize="small" />}
+                                      </IconButton>
+                                    </Tooltip>
+                                  </>
+                                )}
+
+                                {(it.status && (it.status || '').toString().toLowerCase() !== 'pending') && (
+                                  <Tooltip title="Đặt lại PENDING">
+                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'pending'); }} disabled={!!statusLoading[it.id]}>
+                                      {statusLoading[it.id] ? <CircularProgress size={16} /> : <ReplayIcon fontSize="small" />}
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+
+                                <Tooltip title="Chỉnh sửa">
+                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEditDialog(it); }}><EditIcon fontSize="small" /></IconButton>
+                                </Tooltip>
+
+                                <Tooltip title="Xóa">
+                                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDelete(it.id); }}><DeleteIcon fontSize="small" /></IconButton>
+                                </Tooltip>
+                              </>
+                            )}
                           </Stack>
                         </TableCell>
                       </TableRow>
@@ -1037,8 +1106,9 @@ export default function Consultation() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDialog}>Hủy</Button>
-          <Button variant="contained" onClick={handleSave}>
+          <Button onClick={closeDialog} disabled={saveLoading}>Hủy</Button>
+          <Button variant="contained" onClick={handleSave} disabled={saveLoading}>
+            {saveLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
             {editMode ? 'Cập nhật' : 'Tạo'}
           </Button>
         </DialogActions>
@@ -1253,17 +1323,13 @@ export default function Consultation() {
                   <Typography variant="subtitle1" fontWeight="bold" color="#92400e" sx={{ mb: 2 }}>
                     Trạng thái
                   </Typography>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip 
-                      label={getStatusLabel(detailItem.status)}
-                      sx={{ 
-                        bgcolor: getStatusColor(detailItem.status),
-                        color: 'white',
-                        fontWeight: 600,
-                        fontSize: '0.9rem'
-                      }}
-                    />
-                  </Stack>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Chip
+                        label={getStatusLabel(detailItem.status)}
+                        color={getStatusVariant(detailItem.status)}
+                        sx={{ fontWeight: 600, fontSize: '0.9rem' }}
+                      />
+                    </Stack>
                 </Paper>
               </Grid>
 
@@ -1304,8 +1370,10 @@ export default function Consultation() {
                 size="small"
                 variant="outlined"
                 onClick={async () => {
+                  const id = detailItem!.id;
+                  setStatusLoading(prev => ({ ...prev, [id]: true }));
                   try {
-                    const res = await ConsultationAPI.confirm(detailItem!.id);
+                    const res = await ConsultationAPI.confirm(id);
                     if (res?.success) {
                       toast.success('Xác nhận thành công');
                       await loadConsultations();
@@ -1315,10 +1383,14 @@ export default function Consultation() {
                     }
                   } catch (e) {
                     toast.error((e as Error)?.message || 'Lỗi');
+                  } finally {
+                    setStatusLoading(prev => ({ ...prev, [id]: false }));
                   }
                 }}
                 sx={{ color: '#60a5fa', borderColor: '#60a5fa' }}
+                disabled={!!statusLoading[detailItem?.id ?? -1]}
               >
+                {statusLoading[detailItem?.id ?? -1] ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
                 Xác nhận
               </Button>
             )}
@@ -1328,8 +1400,10 @@ export default function Consultation() {
                 size="small"
                 variant="outlined"
                 onClick={async () => {
+                  const id = detailItem!.id;
+                  setStatusLoading(prev => ({ ...prev, [id]: true }));
                   try {
-                    const res = await ConsultationAPI.complete(detailItem!.id);
+                    const res = await ConsultationAPI.complete(id);
                     if (res?.success) {
                       toast.success('Hoàn thành thành công');
                       await loadConsultations();
@@ -1339,10 +1413,14 @@ export default function Consultation() {
                     }
                   } catch (e) {
                     toast.error((e as Error)?.message || 'Lỗi');
+                  } finally {
+                    setStatusLoading(prev => ({ ...prev, [id]: false }));
                   }
                 }}
                 sx={{ color: '#4ade80', borderColor: '#4ade80' }}
+                disabled={!!statusLoading[detailItem?.id ?? -1]}
               >
+                {statusLoading[detailItem?.id ?? -1] ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
                 Hoàn thành
               </Button>
             )}
@@ -1352,8 +1430,10 @@ export default function Consultation() {
                 size="small"
                 variant="outlined"
                 onClick={async () => {
+                  const id = detailItem!.id;
+                  setStatusLoading(prev => ({ ...prev, [id]: true }));
                   try {
-                    const res = await ConsultationAPI.cancel(detailItem!.id);
+                    const res = await ConsultationAPI.cancel(id);
                     if (res?.success) {
                       toast.success('Hủy thành công');
                       await loadConsultations();
@@ -1363,10 +1443,14 @@ export default function Consultation() {
                     }
                   } catch (e) {
                     toast.error((e as Error)?.message || 'Lỗi');
+                  } finally {
+                    setStatusLoading(prev => ({ ...prev, [id]: false }));
                   }
                 }}
                 sx={{ color: '#ef4444', borderColor: '#ef4444' }}
+                disabled={!!statusLoading[detailItem?.id ?? -1]}
               >
+                {statusLoading[detailItem?.id ?? -1] ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
                 Hủy
               </Button>
             )}
@@ -1400,8 +1484,9 @@ export default function Consultation() {
           <Typography>Bạn có chắc chắn muốn xóa lịch hẹn này không?</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirmOpen(false)}>Hủy</Button>
-          <Button variant="contained" color="error" onClick={doDelete}>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deleteLoading}>Hủy</Button>
+          <Button variant="contained" color="error" onClick={doDelete} disabled={deleteLoading}>
+            {deleteLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
             Xóa
           </Button>
         </DialogActions>

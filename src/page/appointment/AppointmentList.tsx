@@ -54,6 +54,18 @@ import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { toast, ToastContainer } from 'react-toastify';
 
+// Helper function to normalize status string for consistency
+const normalizeStatus = (status: string | undefined | null): string => {
+  if (!status) return 'UNKNOWN';
+  const s = status.toString().toUpperCase().trim();
+  // Map variations to standard status
+  if (s === 'CONFIRM' || s === 'CONFIRMED') return 'CONFIRMED';
+  if (s === 'PEND' || s === 'PENDING') return 'PENDING';
+  if (s === 'COMPLET' || s === 'COMPLETE' || s === 'COMPLETED') return 'COMPLETE';
+  if (s === 'CANCEL' || s === 'CANCELLED' || s === 'CANCELED') return 'CANCELLED';
+  return s;
+};
+
 export default function AppointmentList() {
   const [items, setItems] = useState<AppointmentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +106,10 @@ export default function AppointmentList() {
   const [editStatus, setEditStatus] = useState<string | undefined>(undefined);
   // track which appointment ids are currently having a reminder sent
   const [sendingReminder, setSendingReminder] = useState<Record<number, boolean>>({});
+  // loading states for actions
+  const [editLoading, setEditLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -205,7 +221,7 @@ export default function AppointmentList() {
           return false;
         }
       }
-      if (statusFilter && (it.status || '').toString() !== statusFilter) return false;
+      if (statusFilter && normalizeStatus(it.status) !== statusFilter) return false;
       // If there's no free-text query, normally we return all items.
       // However when searchBy === 'time' we may still want to apply a dateFilter
       // (picker) even when the search input is empty — so don't early-return
@@ -263,26 +279,13 @@ export default function AppointmentList() {
     </div>);
   if (error) return (<Box sx={{ p: 3 }}><Typography color="error">{error}</Typography></Box>);
 
-  const refreshItems = async () => {
-    setLoading(true);
-    try {
-      const res = await AppointmentAPI.getAll();
-      if (res && res.success) setItems(sortByCreatedAtDesc(res.data || []));
-      else setError(res.message || 'Không tải được danh sách');
-    } catch (e) {
-      setError((e as Error)?.message || 'Lỗi mạng');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleChangePage = (_: unknown, newPage: number) => { setPage(newPage); };
   const handleChangeRowsPerPage = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); };
 
   const openEdit = (it: AppointmentItem) => {
-    // Prevent editing when appointment is already completed (case-insensitive)
-    const _s0 = (it.status || '').toString().toLowerCase();
-    if (_s0 === 'complete' || _s0 === 'completed') {
+    // Prevent editing when appointment is already completed
+    const _s0 = normalizeStatus(it.status);
+    if (_s0 === 'COMPLETE') {
       alert('Không thể chỉnh sửa lịch hẹn đã hoàn thành.');
       return;
     }
@@ -308,24 +311,47 @@ export default function AppointmentList() {
 
   const handleSaveEdit = async () => {
     if (!editItem) return;
-    const payload: Partial<AppointmentItem> = { notes: editNotes };
-    if (editTime) {
-      // convert back to UTC ISO
-      const iso = new Date(editTime).toISOString();
-      payload.scheduledTime = iso;
-    }
-    if (editDentistId !== undefined) payload.dentistRefId = editDentistId;
-    if (editAssistantId !== undefined) payload.assistantId = editAssistantId;
-    if (editBranchId !== undefined) payload.branchId = editBranchId;
-    if (editServiceId !== undefined) payload.serviceId = editServiceId;
-    if (typeof editEstimatedMinutes === 'number') payload.estimatedMinutes = editEstimatedMinutes;
-    if (editStatus !== undefined) payload.status = editStatus;
-    const res = await AppointmentAPI.update(editItem.id, payload);
-    if (res && res.success) {
-      await refreshItems();
-      closeEdit();
-    } else {
-      alert(res.message || 'Cập nhật thất bại');
+    setEditLoading(true);
+    try {
+      const payload: Partial<AppointmentItem> = { notes: editNotes };
+      if (editTime) {
+        // convert back to UTC ISO
+        const iso = new Date(editTime).toISOString();
+        payload.scheduledTime = iso;
+      }
+      if (editDentistId !== undefined) payload.dentistRefId = editDentistId;
+      if (editAssistantId !== undefined) payload.assistantId = editAssistantId;
+      if (editBranchId !== undefined) payload.branchId = editBranchId;
+      if (editServiceId !== undefined) payload.serviceId = editServiceId;
+      if (typeof editEstimatedMinutes === 'number') payload.estimatedMinutes = editEstimatedMinutes;
+      if (editStatus !== undefined) payload.status = editStatus;
+      const res = await AppointmentAPI.update(editItem.id, payload);
+      if (res && res.success) {
+        // Use response data to ensure all fields are properly updated from server
+        const updatedItem = res.data as AppointmentItem;
+        if (updatedItem) {
+          setItems(prevItems =>
+            prevItems.map(it =>
+              it.id === editItem.id ? updatedItem : it
+            )
+          );
+        } else {
+          // Fallback if response doesn't include updated item
+          setItems(prevItems =>
+            prevItems.map(it =>
+              it.id === editItem.id ? { ...it, ...payload } : it
+            )
+          );
+        }
+        toast.success('Cập nhật lịch hẹn thành công');
+        closeEdit();
+      } else {
+        toast.error(res.message || 'Cập nhật thất bại');
+      }
+    } catch (e) {
+      toast.error((e as Error)?.message || 'Cập nhật thất bại');
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -340,9 +366,9 @@ export default function AppointmentList() {
   };
 
   const handleCancelAppointment = async (it: AppointmentItem) => {
-    // Prevent cancelling/deleting when appointment is completed (case-insensitive)
-    const _s1 = (it.status || '').toString().toLowerCase();
-    if (_s1 === 'complete' || _s1 === 'completed') {
+    // Prevent cancelling/deleting when appointment is completed
+    const _s1 = normalizeStatus(it.status);
+    if (_s1 === 'COMPLETE') {
       alert('Không thể hủy lịch hẹn đã hoàn thành.');
       return;
     }
@@ -352,31 +378,61 @@ export default function AppointmentList() {
 
   const doCancel = async () => {
     if (!cancelTargetId) return;
-    setCancelConfirmOpen(false);
+    setCancelLoading(true);
     try {
       const res = await AppointmentAPI.cancel(cancelTargetId);
       if (res && res.success) {
-        await refreshItems();
+        // Update local state instead of refreshing entire list
+        setItems(prevItems =>
+          prevItems.filter(it => it.id !== cancelTargetId)
+        );
+        toast.success('Hủy lịch hẹn thành công');
+        setCancelConfirmOpen(false);
       } else {
-        alert(res.message || 'Hủy thất bại');
+        toast.error(res.message || 'Hủy thất bại');
       }
     } catch (e) {
-      alert((e as Error)?.message || 'Hủy thất bại');
+      toast.error((e as Error)?.message || 'Hủy thất bại');
     } finally {
       setCancelTargetId(null);
+      setCancelLoading(false);
     }
   };
 
   const handleChangeStatus = async (id: number, status: string) => {
+    setStatusLoading(prev => ({ ...prev, [id]: true }));
     try {
-      const res = await AppointmentAPI.setStatus(id, status);
+      const normalizedStatus = normalizeStatus(status);
+      const res = await AppointmentAPI.setStatus(id, normalizedStatus);
       if (res && res.success) {
-        await refreshItems();
+        // Use response data to ensure all fields are properly updated from server
+        const updatedItem = res.data as AppointmentItem;
+        if (updatedItem) {
+          // Normalize status in response to ensure consistency
+          if (updatedItem.status) {
+            updatedItem.status = normalizeStatus(updatedItem.status);
+          }
+          setItems(prevItems =>
+            prevItems.map(it =>
+              it.id === id ? updatedItem : it
+            )
+          );
+        } else {
+          // Fallback if response doesn't include updated item
+          setItems(prevItems =>
+            prevItems.map(it =>
+              it.id === id ? { ...it, status: normalizedStatus } : it
+            )
+          );
+        }
+        toast.success('Cập nhật trạng thái thành công');
       } else {
-        alert(res.message || 'Cập nhật trạng thái thất bại');
+        toast.error(res.message || 'Cập nhật trạng thái thất bại');
       }
     } catch (e) {
-      alert((e as Error)?.message || 'Cập nhật trạng thái thất bại');
+      toast.error((e as Error)?.message || 'Cập nhật trạng thái thất bại');
+    } finally {
+      setStatusLoading(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -520,7 +576,12 @@ export default function AppointmentList() {
                         <Typography variant="caption" color="text.secondary">{it.scheduledTime ? new Date(it.scheduledTime).toLocaleString() : ''}</Typography>
                       </Box>
                       <Box>
-                        <Chip label={it.status ?? 'UNKNOWN'} size="small" />
+                        {(() => {
+                          const ns = normalizeStatus(it.status);
+                          const s = ns.toLowerCase();
+                          const colorVar: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : s === 'cancelled' ? 'default' : 'info';
+                          return <Chip label={ns} size="small" color={colorVar} />;
+                        })()}
                       </Box>
                     </Stack>
                     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
@@ -530,21 +591,29 @@ export default function AppointmentList() {
                   </CardContent>
                   <CardActions sx={{ justifyContent: 'flex-end' }}>
                     <Stack direction="row" spacing={0.5}>
-                      {((it.status || '').toString().toLowerCase() === 'pending') && (
-                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'confirm'); }}>
-                          <CheckCircleOutlineIcon fontSize="small" color="success" />
-                        </IconButton>
-                      )}
-                      {((it.status || '').toString().toLowerCase() === 'confirmed' || (it.status || '').toString().toLowerCase() === 'confirm') && (
-                        <>
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'complete'); }}>
-                            <DoneAllIcon fontSize="small" color="primary" />
-                          </IconButton>
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSendReminder(it); }} title={sendingReminder[it.id] ? 'Đang gửi...' : 'Gửi nhắc'} disabled={!!sendingReminder[it.id]}>
-                            {sendingReminder[it.id] ? <CircularProgress size={16} /> : <SendIcon fontSize="small" />}
-                          </IconButton>
-                        </>
-                      )}
+                      {(() => {
+                        const ns = normalizeStatus(it.status);
+                        if (ns === 'PENDING') {
+                          return (
+                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'CONFIRMED'); }} disabled={!!statusLoading[it.id]}>
+                              {statusLoading[it.id] ? <CircularProgress size={16} /> : <CheckCircleOutlineIcon fontSize="small" color="success" />}
+                            </IconButton>
+                          );
+                        }
+                        if (ns === 'CONFIRMED') {
+                          return (
+                            <>
+                              <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'COMPLETE'); }} disabled={!!statusLoading[it.id]}>
+                                {statusLoading[it.id] ? <CircularProgress size={16} /> : <DoneAllIcon fontSize="small" color="primary" />}
+                              </IconButton>
+                              <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSendReminder(it); }} title={sendingReminder[it.id] ? 'Đang gửi...' : 'Gửi nhắc'} disabled={!!sendingReminder[it.id]}>
+                                {sendingReminder[it.id] ? <CircularProgress size={16} /> : <SendIcon fontSize="small" />}
+                              </IconButton>
+                            </>
+                          );
+                        }
+                        return null;
+                      })()}
                       <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(it); }}><EditIcon fontSize="small" /></IconButton>
                       <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleCancelAppointment(it); }}><DeleteIcon fontSize="small" /></IconButton>
                     </Stack>
@@ -624,59 +693,56 @@ export default function AppointmentList() {
                           </TableCell>
                           <TableCell>
                             {(() => {
-                              const s = (it.status || '').toString().toLowerCase();
-                              const label = it.status ? it.status.toString() : 'UNKNOWN';
+                              const normalized = normalizeStatus(it.status);
+                              const s = normalized.toLowerCase();
                               const colorVar: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : s === 'cancelled' ? 'default' : 'info';
-                              return <Chip size="small" label={label} color={colorVar} />;
+                              return <Chip size="small" label={normalized} color={colorVar} />;
                             })()}
                           </TableCell>
                           <TableCell align="right">
                             <Stack direction="row" spacing={0.5} justifyContent="flex-end" alignItems="center">
-                              {(() => {
-                                const _s = (it.status || '').toString().toLowerCase();
-                                return _s !== 'complete' && _s !== 'completed';
-                              })() && (
-                                  <>
-                                    {((it.status || '').toString().toLowerCase() === 'pending') && (
-                                      <Tooltip title="Xác nhận">
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'confirm'); }}>
-                                          <CheckCircleOutlineIcon fontSize="small" color="success" />
+                              {(() => normalizeStatus(it.status) !== 'COMPLETE')() && (
+                                <>
+                                  {normalizeStatus(it.status) === 'PENDING' && (
+                                    <Tooltip title={statusLoading[it.id] ? 'Đang xử lý...' : 'Xác nhận'}>
+                                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'CONFIRMED'); }} disabled={!!statusLoading[it.id]}>
+                                        {statusLoading[it.id] ? <CircularProgress size={16} /> : <CheckCircleOutlineIcon fontSize="small" color="success" />}
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+
+                                  {normalizeStatus(it.status) === 'CONFIRMED' && (
+                                    <>
+                                      <Tooltip title={statusLoading[it.id] ? 'Đang xử lý...' : 'Hoàn thành'}>
+                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'COMPLETE'); }} disabled={!!statusLoading[it.id]}>
+                                          {statusLoading[it.id] ? <CircularProgress size={16} /> : <DoneAllIcon fontSize="small" color="primary" />}
                                         </IconButton>
                                       </Tooltip>
-                                    )}
-
-                                                  {((it.status || '').toString().toLowerCase() === 'confirmed' || (it.status || '').toString().toLowerCase() === 'confirm') && (
-                                                    <>
-                                                      <Tooltip title="Hoàn thành">
-                                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'complete'); }}>
-                                                          <DoneAllIcon fontSize="small" color="primary" />
-                                                        </IconButton>
-                                                      </Tooltip>
-                                                      <Tooltip title={sendingReminder[it.id] ? 'Đang gửi...' : 'Gửi nhắc'}>
-                                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSendReminder(it); }} disabled={!!sendingReminder[it.id]}>
-                                                          {sendingReminder[it.id] ? <CircularProgress size={16} /> : <SendIcon fontSize="small" />}
-                                                        </IconButton>
-                                                      </Tooltip>
-                                                    </>
-                                                  )}
-
-                                    {(it.status && (it.status || '').toString().toLowerCase() !== 'pending') && (
-                                      <Tooltip title="Đặt lại PENDING">
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'pending'); }}>
-                                          <ReplayIcon fontSize="small" />
+                                      <Tooltip title={sendingReminder[it.id] ? 'Đang gửi...' : 'Gửi nhắc'}>
+                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSendReminder(it); }} disabled={!!sendingReminder[it.id]}>
+                                          {sendingReminder[it.id] ? <CircularProgress size={16} /> : <SendIcon fontSize="small" />}
                                         </IconButton>
                                       </Tooltip>
-                                    )}
+                                    </>
+                                  )}
 
-                                    <Tooltip title="Chỉnh sửa">
-                                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(it); }} title="Chỉnh sửa"><EditIcon fontSize="small" /></IconButton>
+                                  {normalizeStatus(it.status) !== 'PENDING' && (
+                                    <Tooltip title={statusLoading[it.id] ? 'Đang xử lý...' : 'Đặt lại PENDING'}>
+                                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleChangeStatus(it.id, 'PENDING'); }} disabled={!!statusLoading[it.id]}>
+                                        {statusLoading[it.id] ? <CircularProgress size={16} /> : <ReplayIcon fontSize="small" />}
+                                      </IconButton>
                                     </Tooltip>
+                                  )}
 
-                                    <Tooltip title="Hủy">
-                                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleCancelAppointment(it); }} title="Hủy"><DeleteIcon fontSize="small" /></IconButton>
-                                    </Tooltip>
-                                  </>
-                                )}
+                                  <Tooltip title="Chỉnh sửa">
+                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(it); }} title="Chỉnh sửa"><EditIcon fontSize="small" /></IconButton>
+                                  </Tooltip>
+
+                                  <Tooltip title="Hủy">
+                                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleCancelAppointment(it); }} title="Hủy"><DeleteIcon fontSize="small" /></IconButton>
+                                  </Tooltip>
+                                </>
+                              )}
                             </Stack>
                           </TableCell>
                         </TableRow>
@@ -753,8 +819,11 @@ export default function AppointmentList() {
             </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={closeEdit}>Hủy</Button>
-            <Button variant="contained" onClick={handleSaveEdit}>Lưu</Button>
+            <Button onClick={closeEdit} disabled={editLoading}>Hủy</Button>
+            <Button variant="contained" onClick={handleSaveEdit} disabled={editLoading}>
+              {editLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
+              Lưu
+            </Button>
           </DialogActions>
         </Dialog>
         <Dialog open={cancelConfirmOpen} onClose={() => setCancelConfirmOpen(false)}>
@@ -768,8 +837,11 @@ export default function AppointmentList() {
             </Box>
           </DialogContent>
           <DialogActions sx={{ p: 2, gap: 1 }}>
-            <Button onClick={() => setCancelConfirmOpen(false)}>Không</Button>
-            <Button variant="contained" color="error" onClick={doCancel}>Hủy</Button>
+            <Button onClick={() => setCancelConfirmOpen(false)} disabled={cancelLoading}>Không</Button>
+            <Button variant="contained" color="error" onClick={doCancel} disabled={cancelLoading}>
+              {cancelLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : null}
+              Hủy
+            </Button>
           </DialogActions>
         </Dialog>
 
@@ -846,10 +918,10 @@ export default function AppointmentList() {
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Trạng thái</Typography>
                     <Box sx={{ mt: 0.5 }}>
                       {(() => {
-                        const s = (detailItem?.status || '').toString().toLowerCase();
-                        const label = detailItem?.status ? detailItem.status.toString() : 'UNKNOWN';
+                        const normalized = normalizeStatus(detailItem?.status);
+                        const s = normalized.toLowerCase();
                         const colorVar: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' = s === 'confirmed' ? 'success' : s === 'pending' ? 'warning' : s === 'cancelled' ? 'default' : 'info';
-                        return <Chip size="small" label={label} color={colorVar} />;
+                        return <Chip size="small" label={normalized} color={colorVar} />;
                       })()}
                     </Box>
                   </Box>

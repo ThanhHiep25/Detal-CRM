@@ -275,6 +275,23 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
   const handleCreateConsultation = async () => {
     if (!custFullName.trim()) { toast.error('Vui lòng nhập tên khách hàng'); return; }
     if (!custEmail.trim() && !custPhone.trim()) { toast.error('Nhập email hoặc số điện thoại'); return; }
+    // Validation: name (no special chars), phone (starts with 0 and 10 digits), email (@gmail.com)
+    try {
+      const nameRegex = new RegExp('^[\\p{L}\\s]+$','u');
+      if (!nameRegex.test(custFullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
+    } catch {
+      const fallbackName = /^[A-Za-z\s.-]+$/;
+      if (!fallbackName.test(custFullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
+    }
+
+    if (custPhone && custPhone.trim()) {
+      if (!/^0\d{9}$/.test(custPhone.trim())) { toast.error('Số điện thoại phải bắt đầu bằng 0 và có 10 chữ số'); return; }
+    }
+
+    if (custEmail && custEmail.trim()) {
+      if (!/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(custEmail.trim())) { toast.error('Email phải là địa chỉ @gmail.com'); return; }
+    }
+
     setConsultationSubmitting(true);
     try {
       // Only send when user chọn; không map sang userId để tránh giá trị mặc định
@@ -604,6 +621,20 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
                 if (!custFullName.trim()) { toast.error('Vui lòng nhập họ tên'); return; }
                 if (!serviceId) { toast.error('Chọn dịch vụ'); return; }
                 if (!scheduledDate) { toast.error('Chọn ngày dự kiến'); return; }
+                // Validation: name (no special chars), phone (starts with 0 and 10 digits), email (@gmail.com)
+                try {
+                  const nameRegex = new RegExp('^[\\p{L}\\s]+$','u');
+                  if (!nameRegex.test(custFullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
+                } catch {
+                  const fallbackName = /^[A-Za-z\s.-]+$/;
+                  if (!fallbackName.test(custFullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
+                }
+                if (custPhone && custPhone.trim()) {
+                  if (!/^0\d{9}$/.test(custPhone.trim())) { toast.error('Số điện thoại phải bắt đầu bằng 0 và có 10 chữ số'); return; }
+                }
+                if (custEmail && custEmail.trim()) {
+                  if (!/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(custEmail.trim())) { toast.error('Email phải là địa chỉ @gmail.com'); return; }
+                }
                 // Build scheduledTime ISO.
                 // Interpret the selected date+time as local time, then convert to an ISO UTC string.
                 // Using a plain `${date}T${time}` (no trailing 'Z') constructs a local Date in JS.
