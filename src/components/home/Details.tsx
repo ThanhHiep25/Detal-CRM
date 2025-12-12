@@ -31,6 +31,7 @@ import SupplierList from "@/page/supplier/SupplierList";
 import DichVuTK from "@/page/dashboard/Service-statistics";
 import PaymentList from "@/page/servicesDental/PaymentList";
 import Consultation from "@/page/consultation/Consultation";
+import BranchList from "@/page/integration/BranchList";
 
 
 interface DetailsProps {
@@ -86,6 +87,7 @@ const Details: React.FC<DetailsProps> = ({ currentPage }) => {
 
             {/* Tích hợp */}
             {currentPage === 'prescriptionsample' && <PrescriptionSamplePage />}
+            {currentPage === 'branchs' && <BranchList />}
 
             {/* Kho */}
             {currentPage === 'supplier' && <SupplierList />}

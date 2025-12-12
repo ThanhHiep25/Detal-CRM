@@ -1,2 +1,2 @@
-Sitemap: https://spa-massage-ivn.netlify.app/sitemap.xml
+Sitemap: https://detal-crm.vercel.app/sitemap.xml
 

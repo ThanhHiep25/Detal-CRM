@@ -115,9 +115,10 @@ const menuItems: MenuItem[] = [
         icon: DataObject,
         id: 'integrations',
         subItems: [
-            { name: 'Danh sách đơn thuốc mẫu', page: 'prescriptionsample', index: 29 },
+            { name: 'Danh sách đơn thuốc mẫu', page: 'prescriptionsample', index: 29, roles: ['ROLE_ADMIN', 'ROLE_MANAGER', 'ROLE_DENTIST'] },
+            { name: 'Danh sách chi nhánh', page: 'branchs', index: 38, roles: ['ROLE_ADMIN', 'ROLE_MANAGER'] },
         ],
-        roles: ['ROLE_ADMIN', 'ROLE_MANAGER', 'ROLE_DENTIST']
+       
     },
 
     {
