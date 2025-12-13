@@ -198,7 +198,7 @@ export function CustomerFormPage() {
                                 onBlur={() => {
                                     const val = email.trim();
                                     if (!val) { setEmailError(null); return; }
-                                    if (!/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(val)) setEmailError('Email phải là địa chỉ @gmail.com');
+                                    if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/i.test(val)) setEmailError('Email phải không hợp lệ');
                                     else setEmailError(null);
                                 }}
                                 error={!!emailError}
@@ -319,8 +319,8 @@ export function CustomerFormPage() {
                                 return;
                             }
                             // email must be @gmail.com when provided
-                            if (email.trim() && !/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(email.trim())) {
-                                toast.error('Email phải là địa chỉ @gmail.com');
+                            if (email.trim() && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/i.test(email.trim())) {
+                                toast.error('Email phải không hợp lệ');
                                 return;
                             }
                             // birthdate: if provided, customer must be at least 18 years old

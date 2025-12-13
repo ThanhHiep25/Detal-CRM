@@ -166,10 +166,14 @@ export default function SupplierList() {
   const closeCreate = () => { setDialogOpen(false); setIsEditing(false); setForm({ code: '', name: '' }); };
 
   const handleSave = async () => {
-    if (!form.name || !form.code) { toast.error('Vui lòng nhập mã và tên'); return; }
+    if (!form.name || !form.code || !form.address || !form.phone || !form.email) { toast.error('Vui lòng nhập đầy đủ thống tin'); return; }
+    // Regex: Tên chỉ cho phép chữ cái (bao gồm tiếng Việt) và khoảng trắng
+    const NAME_REGEX = /^[\p{L}\s]+$/u;
+    if (!NAME_REGEX.test(String(form.name).trim())) { toast.error('Tên không được chứa ký tự đặc biệt hoặc số'); return; }
     // basic validation: email and phone
     if (form.email && !/^\S+@\S+\.\S+$/.test(String(form.email))) { toast.error('Email không hợp lệ'); return; }
-    if (form.phone && !/^[0-9()+\-\s]{6,20}$/.test(String(form.phone))) { toast.error('Số điện thoại không hợp lệ'); return; }
+    // Regex: SĐT bắt đầu bằng 0 và có đúng 10 chữ số
+    if (form.phone && !/^0\d{9}$/.test(String(form.phone))) { toast.error('SĐT phải bắt đầu bằng 0 và có đúng 10 số'); return; }
     if (isEditing && form.id) {
       setUpdating(true);
       const res = await SupplierAPI.update(form.id, form);
@@ -247,15 +251,15 @@ export default function SupplierList() {
           try {
             const res = await SupplierAPI.delete(id);
             if (res.success) {
-              toast.info('Xóa nhà cung cấp đã được thực hiện trên server');
+              toast.info('Xóa nhà cung cấp đã được thực hiện');
             } else {
               if (pendingDeletedRef.current[id]) setSuppliers(prev => [pendingDeletedRef.current[id], ...prev]);
-              toast.warn(res.message || 'Xóa trên server thất bại; đã phục hồi');
+              toast.warn(res.message || 'Xóa trên thất bại; đã phục hồi');
             }
           } catch (err) {
             console.error('Server delete failed', err);
             if (pendingDeletedRef.current[id]) setSuppliers(prev => [pendingDeletedRef.current[id], ...prev]);
-            toast.error('Lỗi khi xóa trên server; đã phục hồi địa phương');
+            toast.error('Lỗi khi xóa trên; đã phục hồi địa phương');
           } finally {
             delete pendingDeletedRef.current[id];
             if (pendingTimersRef.current[id]) { clearTimeout(pendingTimersRef.current[id]); delete pendingTimersRef.current[id]; }

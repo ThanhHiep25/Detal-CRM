@@ -31,8 +31,9 @@ export function CustomerList() {
 
   // edit dialog
   const [editing, setEditing] = useState<{ open: boolean; user?: UserListItem | null }>({ open: false, user: null });
-  const [form, setForm] = useState<Partial<UserProfile> & { fullName?: string }>({});
+  const [form, setForm] = useState<Partial<UserProfile> & { fullName?: string, username?: string }>({});
   const [saving, setSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<{ fullName?: string; phone?: string }>({});
   const [viewing, setViewing] = useState<{ open: boolean; user?: UserListItem | null }>({ open: false, user: null });
   // lookups maps
   const [occupationsMap, setOccupationsMap] = useState<Record<number, string>>({});
@@ -407,13 +408,34 @@ export function CustomerList() {
     clearSelection();
   }
 
+  // Regex validators
+  const NAME_REGEX = /^[\p{L}\s]+$/u; // Only letters (including Vietnamese) and spaces
+  const PHONE_REGEX = /^0\d{9}$/; // Starts with 0 and exactly 10 digits
+
+  function validateForm(): boolean {
+    const errors: { fullName?: string; phone?: string } = {};
+    const name = form.fullName?.trim() || '';
+    const phone = form.phone?.trim() || '';
+
+    if (name && !NAME_REGEX.test(name)) {
+      errors.fullName = 'Tên không được chứa ký tự đặc biệt hoặc số';
+    }
+    if (phone && !PHONE_REGEX.test(phone)) {
+      errors.phone = 'Số điện thoại phải bắt đầu bằng 0 và có đúng 10 số';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   function openEdit(u: UserListItem) {
     setEditing({ open: true, user: u });
-    setForm({ ...(u.profile || {}), id: u.profile?.id, userId: u.id, phone: u.profile?.phone ?? '', birthDate: u.profile?.birthDate ?? '', gender: u.profile?.gender ?? '', address: u.profile?.address ?? '', emergencyContact: u.profile?.emergencyContact ?? '', province: u.profile?.province ?? '', district: u.profile?.district ?? '', ward: u.profile?.ward ?? '', sourceDetail: u.profile?.sourceDetail ?? '', isReturning: u.profile?.isReturning ?? false, fullName: u.fullName ?? '' });
+    setFormErrors({});
+    setForm({ ...(u.profile || {}), id: u.profile?.id, userId: u.id, phone: u.profile?.phone ?? '', birthDate: u.profile?.birthDate ?? '', gender: u.profile?.gender ?? '', address: u.profile?.address ?? '', emergencyContact: u.profile?.emergencyContact ?? '', province: u.profile?.province ?? '', district: u.profile?.district ?? '', ward: u.profile?.ward ?? '', sourceDetail: u.profile?.sourceDetail ?? '', isReturning: u.profile?.isReturning ?? false, fullName: u.fullName ?? '', username: u.username ?? '' });
   }
 
   async function saveProfile() {
     if (!editing.user) return;
+    if (!validateForm()) return;
     setSaving(true);
     try {
       // Prepare profile payload (strip UI-only fields)
@@ -623,8 +645,8 @@ export function CustomerList() {
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} md={6}>
               <Stack spacing={2}>
-                <TextField fullWidth size="small" label="Họ và tên" value={form.fullName ?? editing.user?.fullName ?? ''} onChange={(e) => setForm(f => ({ ...f, fullName: e.target.value }))} />
-                <TextField fullWidth size="small" label="Số điện thoại" value={form.phone ?? editing.user?.profile?.phone ?? ''} onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))} />
+                <TextField fullWidth size="small" label="Họ và tên" value={form.fullName || form.username || editing.user?.fullName || editing.user?.username || ''} onChange={(e) => { setForm(f => ({ ...f, fullName: e.target.value })); setFormErrors(fe => ({ ...fe, fullName: undefined })); }} error={!!formErrors.fullName} helperText={formErrors.fullName} />
+                <TextField fullWidth size="small" label="Số điện thoại" value={form.phone ?? editing.user?.profile?.phone ?? ''} onChange={(e) => { setForm(f => ({ ...f, phone: e.target.value })); setFormErrors(fe => ({ ...fe, phone: undefined })); }} error={!!formErrors.phone} helperText={formErrors.phone} inputProps={{ maxLength: 10 }} />
                 <TextField fullWidth size="small" label="Email" value={editing.user?.email ?? ''} disabled />
                 <TextField fullWidth size="small" type="date" label="Ngày sinh" InputLabelProps={{ shrink: true }} value={form.birthDate ?? ''} onChange={(e) => setForm(f => ({ ...f, birthDate: e.target.value }))} />
 

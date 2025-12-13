@@ -190,19 +190,20 @@ export const UserAPI = {
       });
   },
   updateProfile: async (payload: Partial<UserProfile>) => {
-    // If the caller included a profile id, use it directly
-    const providedId = (payload && typeof payload.id === 'number') ? payload.id : undefined;
+    // If the caller included a userId, use it directly (endpoint expects userId)
+    const providedUserId = (payload && typeof payload.userId === 'number') ? payload.userId : undefined;
     try {
-      let profileId = providedId;
-      if (!profileId) {
-        const profRes = (await UserAPI.getProfile()) as ApiResponse<UserProfile | null>;
-        profileId = profRes?.data?.id;
+      let userId = providedUserId;
+      if (!userId) {
+        // get current user id
+        const meRes = await http.get('/api/users/me').then(r => r.data);
+        userId = meRes?.data?.id ?? meRes?.id;
       }
-      if (!profileId) {
-        return { success: false, message: 'Không tìm thấy profile id', data: null } as ApiResponse<null>;
+      if (!userId) {
+        return { success: false, message: 'Không tìm thấy user id', data: null } as ApiResponse<null>;
       }
-      // Use PUT to update the full resource at /api/user-profiles/{id}
-      const axiosRes = await http.put(`/api/user-profiles/${profileId}`, payload);
+      // Use PUT to update the profile resource at /api/user-profiles/{userId}
+      const axiosRes = await http.put(`/api/user-profiles/${userId}`, payload);
       const raw = axiosRes.data;
       // If backend already returns ApiResponse<T>, return it as-is
       if (raw && typeof raw === 'object' && 'success' in (raw as Record<string, unknown>)) {

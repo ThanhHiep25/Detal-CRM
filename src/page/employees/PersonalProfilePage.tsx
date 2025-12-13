@@ -154,9 +154,8 @@ export function PersonalProfilePage() {
   const validate = (): string | null => {
 
     // name must not be empty and must not contain special characters or digits
-    const nameRegex = /^[A-Za-zÀ-ÖØ-öø-ÿ\s'-]+$/;
+   
     if (!name.trim()) return 'Tên không được để trống';
-    if (!nameRegex.test(name.trim())) return 'Tên không được chứa ký tự đặc biệt hoặc số';
 
     if (!email.trim()) return 'Email không được để trống';
     if (!regex.email.test(email)) return 'Email không đúng định dạng';

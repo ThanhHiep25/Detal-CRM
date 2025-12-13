@@ -63,11 +63,20 @@ function downloadCSV(rows: Record<string, unknown>[], filename = "export.csv") {
 }
 
 // Cải tiến: validateAccount nhận EditableAccount hoặc Partial<Account>
+// Regex: Tên chỉ cho phép chữ cái (bao gồm tiếng Việt) và khoảng trắng
+const NAME_REGEX = /^[\p{L}\s]+$/u;
+// Regex: SĐT bắt đầu bằng 0 và có đúng 10 chữ số
+const PHONE_REGEX = /^0\d{9}$/;
+
 function validateAccount(a: Partial<EditableAccount>): EditingErrors {
   const errors: EditingErrors = {};
-  if (!a.name || !String(a.name).trim()) errors.name = "Tên không được để trống";
+  if (!a.name || !String(a.name).trim()) {
+    errors.name = "Tên không được để trống";
+  } else if (!NAME_REGEX.test(String(a.name).trim())) {
+    errors.name = "Tên không được chứa ký tự đặc biệt hoặc số";
+  }
   if (!a.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(a.email))) errors.email = "Email không hợp lệ";
-  if (a.phone && !/^0\d{9}$/.test(String(a.phone))) errors.phone = "SĐT phải bắt đầu 0 và có 10 chữ số";
+  if (a.phone && !PHONE_REGEX.test(String(a.phone))) errors.phone = "SĐT phải bắt đầu bằng 0 và có đúng 10 số";
   return errors;
 }
 

@@ -87,8 +87,8 @@ const validateField = (name: string, value: string) => {
   switch (name) {
     case "phone":
       if (!v) return "Vui lòng nhập số điện thoại.";
-      // Cho phép 9-15 chữ số để phù hợp Add_Staff
-      if (!/^\d{9,15}$/.test(v)) return "SĐT phải gồm 9-15 chữ số.";
+      // SĐT phải bắt đầu bằng 0 và có đúng 10 chữ số
+      if (!/^0\d{9}$/.test(v)) return "SĐT phải bắt đầu bằng 0 và có đúng 10 số.";
       return "";
     case "email":
       if (!v) return "Vui lòng nhập email.";

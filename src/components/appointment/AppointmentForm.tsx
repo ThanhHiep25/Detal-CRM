@@ -289,7 +289,7 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
     }
 
     if (custEmail && custEmail.trim()) {
-      if (!/^[A-Za-z0-9._%+-]+@gmail\.com$/i.test(custEmail.trim())) { toast.error('Email phải là địa chỉ @gmail.com'); return; }
+      if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/i.test(custEmail.trim())) { toast.error('Email không hợp lệ'); return; }
     }
 
     setConsultationSubmitting(true);

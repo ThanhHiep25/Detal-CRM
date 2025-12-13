@@ -28,7 +28,7 @@ const inputStyles = { '& .MuiFilledInput-root': { border: '1px solid transparent
 const TIME_SLOTS = [
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
     '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
-    '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
+    '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00'
 ];
 
 export interface AppointmentSchedulerProps {
@@ -70,6 +70,18 @@ export function AppointmentScheduler({ onChange }: AppointmentSchedulerProps) {
         };
         onChange(payload);
     }, [selectedDate, selectedTime, dentistRefId, assistantId, serviceId, notes, onChange, services]);
+
+    // Clear selected time if it becomes invalid (in the past or beyond max allowed)
+    useEffect(() => {
+        if (!selectedDate || !selectedTime) return;
+        const [hours, minutes] = selectedTime.split(':').map(Number);
+        const dateTime = selectedDate.hour(hours).minute(minutes).second(0).millisecond(0);
+        const now = dayjs();
+        const maxDateTime = dayjs().add(3, 'month').endOf('day');
+        if (dateTime.isBefore(now) || dateTime.isAfter(maxDateTime)) {
+            setSelectedTime('');
+        }
+    }, [selectedDate, selectedTime]);
 
     // fetch dentists on mount for both dentist and assistant selects
     useEffect(() => {
@@ -142,22 +154,41 @@ export function AppointmentScheduler({ onChange }: AppointmentSchedulerProps) {
                             p: 1
                         }}>
                             <Stack direction="row" flexWrap="wrap" gap={1}>
-                                {TIME_SLOTS.map((time) => (
-                                    <Chip
-                                        key={time}
-                                        label={time}
-                                        onClick={() => setSelectedTime(time)}
-                                        color={selectedTime === time ? 'primary' : 'default'}
-                                        variant={selectedTime === time ? 'filled' : 'outlined'}
-                                        sx={{ 
-                                            minWidth: 70,
-                                            cursor: 'pointer',
-                                            '&:hover': {
-                                                backgroundColor: selectedTime === time ? undefined : grey[100]
-                                            }
-                                        }}
-                                    />
-                                ))}
+                                {TIME_SLOTS.map((time) => {
+                                    const [h, m] = time.split(':').map(Number);
+                                    const disabled = (() => {
+                                        if (!selectedDate) return false;
+                                        const dt = selectedDate.hour(h).minute(m).second(0).millisecond(0);
+                                        const now = dayjs();
+                                        const maxDateTime = dayjs().add(3, 'month').endOf('day');
+                                        // disallow past times and times beyond 3 months
+                                        if (dt.isBefore(now)) return true;
+                                        if (dt.isAfter(maxDateTime)) return true;
+                                        // enforce business hours 08:00 - 20:00
+                                        const totalMin = h * 60 + m;
+                                        if (totalMin < 8 * 60 || totalMin > 20 * 60) return true;
+                                        return false;
+                                    })();
+
+                                    return (
+                                        <Chip
+                                            key={time}
+                                            label={time}
+                                            onClick={() => { if (!disabled) setSelectedTime(time); }}
+                                            disabled={disabled}
+                                            color={selectedTime === time ? 'primary' : 'default'}
+                                            variant={selectedTime === time ? 'filled' : 'outlined'}
+                                            sx={{ 
+                                                minWidth: 70,
+                                                cursor: disabled ? 'default' : 'pointer',
+                                                opacity: disabled ? 0.5 : 1,
+                                                '&:hover': {
+                                                    backgroundColor: disabled ? undefined : (selectedTime === time ? undefined : grey[100])
+                                                }
+                                            }}
+                                        />
+                                    );
+                                })}
                             </Stack>
                         </Box>
                     </Box>

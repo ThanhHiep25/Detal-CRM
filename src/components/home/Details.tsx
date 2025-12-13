@@ -3,8 +3,6 @@
 import HieuSuatNV from "../../page/dashboard/Hieu_suat_NV";
 import ThongKeTC from "../../page/dashboard/Thong_Ke_TC";
 import ServicePaymentHistory from "../../page/history/LS_ServiceSpa";
-import OrderAdd from "../../page/order/OrderAdd";
-import OrderList from "../../page/order/OrderList";
 import ProductAdd from "../../page/products/ProductAdd";
 import ProductList from "../../page/products/ProductList";
 import EmployeeList from "../../page/employees/EmployeesList";
@@ -97,9 +95,6 @@ const Details: React.FC<DetailsProps> = ({ currentPage }) => {
             {currentPage === 'themSP' && <ProductAdd />}
             {currentPage === 'danhsachSP' && <ProductList />}
 
-            {/* Đơn hàng */}
-            {currentPage === 'themDH' && <OrderAdd />}
-            {currentPage === 'danhsachDH' && <OrderList />}
 
             {/* Lịch sử */}
             {currentPage === 'lsdv' && <ServicePaymentHistory />}
