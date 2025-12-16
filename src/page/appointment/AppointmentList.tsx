@@ -883,8 +883,42 @@ export default function AppointmentList() {
                     <Typography variant="body2">{detailItem?.serviceName ?? detailItem?.serviceId ?? '-'}</Typography>
                   </Box>
                   <Box sx={{ p: 1.5, bgcolor: 'white', borderRadius: 1, border: '1px solid #e5e7eb' }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Thời lượng ước tính</Typography>
-                    <Typography variant="body2">{detailItem?.estimatedMinutes ? `${detailItem.estimatedMinutes} phút` : '-'}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Thời lượng dịch vụ</Typography>
+                    <Typography variant="body2">
+                      {detailItem?.serviceDurationMinutes 
+                        ? `${detailItem.serviceDurationMinutes} phút` 
+                        : detailItem?.serviceDuration 
+                          ? `${detailItem.serviceDuration} phút` 
+                          : detailItem?.estimatedMinutes 
+                            ? `${detailItem.estimatedMinutes} phút` 
+                            : '-'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, bgcolor: 'white', borderRadius: 1, border: '1px solid #e5e7eb' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Giá dịch vụ</Typography>
+                    <Typography variant="body2">
+                      {detailItem?.servicePrice 
+                        ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(detailItem.servicePrice) 
+                        : '-'}
+                    </Typography>
+                  </Box>
+                  {detailItem?.serviceDiscountPercent && detailItem.serviceDiscountPercent > 0 && (
+                    <Box sx={{ p: 1.5, bgcolor: '#fef3c7', borderRadius: 1, border: '1px solid #fcd34d' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Giảm giá</Typography>
+                      <Typography variant="body2" sx={{ color: '#d97706', fontWeight: 600 }}>
+                        {detailItem.serviceDiscountPercent}%
+                      </Typography>
+                    </Box>
+                  )}
+                  <Box sx={{ p: 1.5, bgcolor: detailItem?.serviceTotalPrice ? '#ecfdf5' : 'white', borderRadius: 1, border: detailItem?.serviceTotalPrice ? '1px solid #10b981' : '1px solid #e5e7eb' }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Tổng tiền</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: detailItem?.serviceTotalPrice ? 700 : 400, color: detailItem?.serviceTotalPrice ? '#059669' : 'inherit' }}>
+                      {detailItem?.serviceTotalPrice 
+                        ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(detailItem.serviceTotalPrice) 
+                        : detailItem?.servicePrice 
+                          ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(detailItem.servicePrice) 
+                          : '-'}
+                    </Typography>
                   </Box>
                   <Box sx={{ p: 1.5, bgcolor: 'white', borderRadius: 1, border: '1px solid #e5e7eb' }}>
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Chi nhánh</Typography>

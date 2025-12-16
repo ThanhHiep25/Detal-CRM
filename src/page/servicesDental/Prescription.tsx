@@ -140,10 +140,18 @@ export default function PrescriptionPage() {
     return () => window.removeEventListener('app:navigate', handler as EventListener);
   }, []);
 
-  // compute totals derived from current prescription and prices
+  // compute totals derived from current prescription
+  // Ưu tiên lấy từ response (drugPrice, lineTotal), fallback sang prices map nếu đang tạo mới
   const computeTotals = () => {
     const list = (prescription.drugs || []) as PrescriptionDrug[];
-    const total = list.reduce((s, it) => s + ((prices[it.drugId || 0] || 0) * (it.quantity || 0)), 0);
+    const total = list.reduce((s, it) => {
+      // Ưu tiên lineTotal từ response, fallback sang drugPrice * quantity, cuối cùng là prices map
+      if (it.lineTotal != null && it.lineTotal > 0) {
+        return s + it.lineTotal;
+      }
+      const unitPrice = it.drugPrice ?? prices[it.drugId || 0] ?? 0;
+      return s + (unitPrice * (it.quantity || 0));
+    }, 0);
     const discountPercent = prescription.discountPercent ?? 0;
     // Prefer an explicit discountAmount (when present and >0). Otherwise compute from percent.
     const discountAmount = (prescription.discountAmount != null && prescription.discountAmount > 0)
@@ -217,28 +225,37 @@ export default function PrescriptionPage() {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   const buildPrintBody = (pres: Partial<Prescription>) => {
-    const ap = appointments.find(a => a.id === pres.appointmentId);
+    const ap = appointments.find(a => a.id === (pres.appointmentId ?? pres.appointment?.id));
     const _apMisc = (ap as unknown) as { customerPhone?: string; customerEmail?: string } | undefined;
-    const patientContact = _apMisc?.customerPhone || pres.patientEmail || _apMisc?.customerEmail || '';
+    // Lấy thông tin patient từ nested object hoặc flat fields
+    const patientName = pres.patient?.fullName || pres.patient?.username || pres.patientName || '';
+    const patientContact = _apMisc?.customerPhone || pres.patient?.email || pres.patientEmail || _apMisc?.customerEmail || '';
+    // Lấy thông tin doctor từ nested object hoặc flat fields
+    const doctorName = pres.doctor?.name || pres.doctorName || '';
+    
     const rowsHtml = (pres.drugs || []).map(pd => {
       const name = escapeHtml(pd.drugName || drugs.find(d => d.id === pd.drugId)?.name || pd.drugId || '');
       const qty = pd.quantity || 0;
-      const unitPrice = prices[pd.drugId || 0] || 0;
-      const lineTotal = unitPrice * qty;
+      // Ưu tiên lấy drugPrice từ response, fallback sang prices map
+      const unitPrice = pd.drugPrice ?? prices[pd.drugId || 0] ?? 0;
+      // Ưu tiên lấy lineTotal từ response, fallback sang tính toán
+      const lineTotal = pd.lineTotal ?? (unitPrice * qty);
+      const unit = pd.priceUnit ? ` (${pd.priceUnit})` : '';
       return `
             <tr>
-              <td style="padding:8px;border-bottom:1px solid #f0f0f0">${name}</td>
+              <td style="padding:8px;border-bottom:1px solid #f0f0f0">${name}${unit}</td>
               <td style="text-align:center;padding:8px;border-bottom:1px solid #f0f0f0">${qty}</td>
               <td style="text-align:right;padding:8px;border-bottom:1px solid #f0f0f0">${new Intl.NumberFormat('vi-VN').format(unitPrice)} đ</td>
               <td style="text-align:right;padding:8px;border-bottom:1px solid #f0f0f0">${new Intl.NumberFormat('vi-VN').format(lineTotal)} đ</td>
             </tr>`;
     }).join('\n');
 
+    // Ưu tiên lấy totalAmount, finalAmount từ response nếu có
     const totals = computeTotals();
-    const subtotal = totals.total || 0;
-    const total = totals.finalAmount || 0;
-    const discountAmount = totals.discountAmount || 0;
-    const discountPercent = totals.discountPercent || 0;
+    const subtotal = pres.totalAmount ?? totals.total ?? 0;
+    const total = pres.finalAmount ?? totals.finalAmount ?? 0;
+    const discountAmount = pres.discountAmount ?? totals.discountAmount ?? 0;
+    const discountPercent = pres.discountPercent ?? totals.discountPercent ?? 0;
     const discountLabel = (pres.discountAmount != null && pres.discountAmount > 0)
       ? `${Number(pres.discountAmount).toLocaleString('vi-VN')} đ`
       : `${discountPercent}% (${discountAmount.toLocaleString('vi-VN')} đ)`;
@@ -265,12 +282,12 @@ export default function PrescriptionPage() {
         <div style="display:flex;justify-content:space-between;margin-bottom:12px">
           <div>
             <div style="font-size:13px;font-weight:600">Bệnh nhân</div>
-            <div style="font-size:13px">${escapeHtml(pres.patientName)}</div>
+            <div style="font-size:13px">${escapeHtml(patientName)}</div>
             <div style="font-size:12px;color:#555">${escapeHtml(patientContact)}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:13px;font-weight:600">Bác sĩ</div>
-            <div style="font-size:13px">${escapeHtml(pres.doctorName)}</div>
+            <div style="font-size:13px">${escapeHtml(doctorName)}</div>
           </div>
         </div>
 
@@ -303,13 +320,13 @@ export default function PrescriptionPage() {
             <div style="font-size:13px;color:#444">Bệnh nhân:</div>
             <div style="font-style:italic;color:#666;margin-bottom:6px">(Chữ ký xác nhận)</div>
             <div style="height:60px"></div>
-            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${escapeHtml(pres.patientName || '')}</div>
+            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${escapeHtml(patientName || '')}</div>
           </div>
           <div style="width:48%; text-align:right">
             <div style="font-size:13px;color:#444">Bác sĩ kê đơn / điều trị</div>
             <div style="font-style:italic;color:#666;margin-bottom:6px">(Chữ ký xác nhận)</div>
             <div style="height:60px"></div>
-            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${escapeHtml(pres.doctorName || '')}</div>
+            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${escapeHtml(doctorName || '')}</div>
           </div>
         </div>
       </div>`;
@@ -627,35 +644,49 @@ export default function PrescriptionPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Thuốc</TableCell>
-                      <TableCell sx={{ width: 120 }}>Số lượng</TableCell>
-                      <TableCell sx={{ width: 160 }}>Giá</TableCell>
+                      <TableCell sx={{ width: 100 }}>Số lượng</TableCell>
+                      <TableCell sx={{ width: 140 }}>Đơn giá</TableCell>
+                      <TableCell sx={{ width: 130 }}>Thành tiền</TableCell>
                       <TableCell>Ghi chú</TableCell>
                       <TableCell sx={{ width: 64 }} align="center">&nbsp;</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {(prescription.drugs || []).map((pd, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>{(pd.drugName || drugs.find(d => d.id === pd.drugId)?.name || pd.drugId)}</TableCell>
-                        <TableCell>
-                          <TextField size="small" type="number" inputProps={{ min: 1 }} value={pd.quantity ?? 1} onChange={(e) => updateDrugEntry(idx, { quantity: Math.max(1, Number(e.target.value || 1)) })} sx={{ width: 96 }} />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Typography variant="body2">{new Intl.NumberFormat('vi-VN').format(prices[pd.drugId || 0] || 0)}</Typography>
-                            <Typography variant="body2">{drugs.find(d => d.id === pd.drugId)?.priceUnit || 'đ'}</Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <TextField size="small" value={pd.note || ''} onChange={(e) => updateDrugEntry(idx, { note: e.target.value })} fullWidth />
-                        </TableCell>
-                        <TableCell align="center">
-                          <IconButton size="small" color="error" onClick={() => removeDrug(idx)} title="Xóa thuốc">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {(prescription.drugs || []).map((pd, idx) => {
+                      // Ưu tiên lấy drugPrice từ response, fallback sang prices map
+                      const unitPrice = pd.drugPrice ?? prices[pd.drugId || 0] ?? 0;
+                      // Ưu tiên lấy priceUnit từ response, fallback sang drugs catalog
+                      const unit = pd.priceUnit || drugs.find(d => d.id === pd.drugId)?.priceUnit || 'đ';
+                      // Ưu tiên lấy lineTotal từ response, fallback sang tính toán
+                      const lineTotal = pd.lineTotal ?? (unitPrice * (pd.quantity || 0));
+                      return (
+                        <TableRow key={idx}>
+                          <TableCell>{(pd.drugName || drugs.find(d => d.id === pd.drugId)?.name || pd.drugId)}</TableCell>
+                          <TableCell>
+                            <TextField size="small" type="number" inputProps={{ min: 1 }} value={pd.quantity ?? 1} onChange={(e) => updateDrugEntry(idx, { quantity: Math.max(1, Number(e.target.value || 1)) })} sx={{ width: 96 }} />
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2">{new Intl.NumberFormat('vi-VN').format(unitPrice)}</Typography>
+                              <Typography variant="body2">/{unit}</Typography>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {new Intl.NumberFormat('vi-VN').format(lineTotal)} đ
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <TextField size="small" value={pd.note || ''} onChange={(e) => updateDrugEntry(idx, { note: e.target.value })} fullWidth />
+                          </TableCell>
+                          <TableCell align="center">
+                            <IconButton size="small" color="error" onClick={() => removeDrug(idx)} title="Xóa thuốc">
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -732,8 +763,8 @@ export default function PrescriptionPage() {
 
               <div className="flex justify-between mb-2 mt-10">
                 <div className="w-1/2">
-                  <Typography variant="body2" sx={{ fontSize: 16 }}><strong>Bệnh nhân: </strong>{prescription.patientName}</Typography>
-                  <Typography variant="body2" sx={{ fontSize: 16, marginTop: 1, marginBottom: 1 }}><strong>Email: </strong>{prescription.patientEmail}</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 16 }}><strong>Bệnh nhân: </strong>{prescription.patient?.fullName || prescription.patient?.username || prescription.patientName || '-'}</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 16, marginTop: 1, marginBottom: 1 }}><strong>Email: </strong>{prescription.patient?.email || prescription.patientEmail || '-'}</Typography>
                   
                   <div className='w-full'>
                     <strong>Tình trạng chuẩn đoán: </strong>
@@ -742,10 +773,14 @@ export default function PrescriptionPage() {
                 </div>
 
                 <div className="">
-                  <Typography variant="body2" sx={{ fontSize: 16, marginTop: 1 }}><strong>Bác sĩ: </strong>{prescription.doctorName}</Typography>
+                  <Typography variant="body2" sx={{ fontSize: 16, marginTop: 1 }}><strong>Bác sĩ: </strong>{prescription.doctor?.name || prescription.doctorName || '-'}</Typography>
                   <Typography variant="body2" sx={{ fontSize: 16, marginTop: 1, marginBottom: 2 }}>
                     <strong>Lịch hẹn ngày </strong>
-                    {appointments.find(a => a.id === prescription.appointmentId)?.scheduledTime ? new Date(appointments.find(a => a.id === prescription.appointmentId)?.scheduledTime || 0).toLocaleString() : new Date().toLocaleString()}
+                    {prescription.appointment?.scheduledTime 
+                      ? new Date(prescription.appointment.scheduledTime).toLocaleString() 
+                      : appointments.find(a => a.id === prescription.appointmentId)?.scheduledTime 
+                        ? new Date(appointments.find(a => a.id === prescription.appointmentId)?.scheduledTime || 0).toLocaleString() 
+                        : new Date().toLocaleString()}
                   </Typography>
                 </div>
 
@@ -810,12 +845,12 @@ export default function PrescriptionPage() {
               <div className="flex flex-col items-center gap-2">
                 <p>Bệnh nhân:</p>
                 <i>(Chữ ký xác nhận)</i>
-                <p className='font-bold mt-20'>{prescription.patientName}</p>
+                <p className='font-bold mt-20'>{prescription.patient?.fullName || prescription.patient?.username || prescription.patientName || ''}</p>
               </div>
               <div className="flex flex-col items-center gap-2">
                 <p>Bác sĩ kê đơn / điều trị:</p>
                 <i>(Chữ ký xác nhận)</i>
-                <p className='font-bold mt-20'>{prescription.doctorName}</p>
+                <p className='font-bold mt-20'>{prescription.doctor?.name || prescription.doctorName || ''}</p>
               </div>
             </div>
 

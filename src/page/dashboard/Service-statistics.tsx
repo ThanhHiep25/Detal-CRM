@@ -36,6 +36,7 @@ import DashboardAPI, { type ByDentistEntry } from '../../services/dasboard';
 import { ServiceAPI, type ServiceItem } from '../../services/service';
 import { AppointmentAPI, type AppointmentItem } from '../../services/appointments';
 import { DentistAPI, type Dentist } from '../../services/dentist';
+import PaymentAPI, { type Transaction } from '../../services/payment';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs, { Dayjs } from 'dayjs';
@@ -75,6 +76,7 @@ const DichVuTK: React.FC = () => {
     const [allDentists, setAllDentists] = useState<Dentist[]>([]);
     const [allAppointments, setAllAppointments] = useState<AppointmentItem[]>([]);
     const [services, setServices] = useState<ServiceItem[]>([]);
+    const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
     const [serviceUsage, setServiceUsage] = useState<Record<string, { count: number; totalPrice: number }>>({});
     const [dentistStats, setDentistStats] = useState<ByDentistEntry[] | null>(null);
     const [appliedStart, setAppliedStart] = useState<string | null>(null);
@@ -271,7 +273,12 @@ const DichVuTK: React.FC = () => {
         let mounted = true;
         (async () => {
             try {
-                const [dsRes, apptsRes, servicesRes] = await Promise.all([DentistAPI.getDentists(), AppointmentAPI.getAll(), ServiceAPI.getServices()]);
+                const [dsRes, apptsRes, servicesRes, txRes] = await Promise.all([
+                    DentistAPI.getDentists(),
+                    AppointmentAPI.getAll(),
+                    ServiceAPI.getServices(),
+                    PaymentAPI.getAllTransactions(),
+                ]);
                 if (!mounted) return;
                 if (dsRes && dsRes.success && Array.isArray(dsRes.data)) {
                     setAllDentists(dsRes.data || []);
@@ -281,6 +288,9 @@ const DichVuTK: React.FC = () => {
                 }
                 if (servicesRes && servicesRes.success && Array.isArray(servicesRes.data)) {
                     setServices(servicesRes.data || []);
+                }
+                if (txRes && Array.isArray(txRes)) {
+                    setAllTransactions(txRes);
                 }
             } catch {
                 // ignore
@@ -350,6 +360,88 @@ const DichVuTK: React.FC = () => {
     const completedAppointments = useMemo(() => {
         return filteredAppointments.filter(a => (a.status ?? '').toString().toUpperCase() === 'COMPLETED');
     }, [filteredAppointments]);
+
+    // ========== PAYMENT-BASED ANALYTICS ==========
+    
+    // Filter transactions by applied date range
+    const transactionsInRange = useMemo(() => {
+        if (!allTransactions || !allTransactions.length) return [];
+        return allTransactions.filter(t => {
+            const dateStr = String(t.transactionTime ?? t.paymentDate ?? (t as unknown as Record<string, unknown>)['createdAt'] ?? '');
+            if (!dateStr) return false;
+            const tMs = new Date(dateStr).getTime();
+            if (Number.isNaN(tMs)) return false;
+            if (appliedStartMs !== null && tMs < appliedStartMs) return false;
+            if (appliedEndMs !== null && tMs > appliedEndMs) return false;
+            return true;
+        });
+    }, [allTransactions, appliedStartMs, appliedEndMs]);
+
+    // Successful transactions only (status === 'SUCCESS')
+    const successfulTransactions = useMemo(() => {
+        return transactionsInRange.filter(t => (t.status ?? '').toString().toUpperCase() === 'SUCCESS');
+    }, [transactionsInRange]);
+
+    // Daily revenue trend from successful transactions
+    const dailyRevenueTrend = useMemo(() => {
+        const dayMap: Record<string, number> = {};
+        successfulTransactions.forEach(t => {
+            const dateStr = String(t.transactionTime ?? t.paymentDate ?? (t as unknown as Record<string, unknown>)['createdAt'] ?? '');
+            if (!dateStr) return;
+            const d = new Date(dateStr);
+            const dayKey = d.toISOString().slice(0, 10); // YYYY-MM-DD
+            const amt = Number(t.amount ?? 0);
+            dayMap[dayKey] = (dayMap[dayKey] || 0) + amt;
+        });
+        // Sort by date ascending
+        const sorted = Object.entries(dayMap)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([date, revenue]) => ({ date, revenue }));
+        return sorted;
+    }, [successfulTransactions]);
+
+    // Dentist revenue from successful transactions (stronger than price estimates)
+    const dentistRevenueFromPayments = useMemo(() => {
+        const map: Record<number, number> = {};
+        successfulTransactions.forEach(t => {
+            // Extract dentist ID from appointment if available
+            const appt = t.appointment as AppointmentItem | undefined;
+            if (!appt) return;
+            const did = Number(appt.dentistId ?? appt.dentistRefId ?? appt.dentistUserId ?? -1);
+            if (did <= 0) return;
+            const amt = Number(t.amount ?? 0);
+            map[did] = (map[did] || 0) + amt;
+        });
+        return map;
+    }, [successfulTransactions]);
+
+    // Payment metrics
+    const paymentMetrics = useMemo(() => {
+        const successCount = successfulTransactions.length;
+        const totalPaid = successfulTransactions.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+        const allCount = transactionsInRange.length;
+        const successRate = allCount > 0 ? (successCount / allCount) * 100 : 0;
+        const avgTicket = successCount > 0 ? totalPaid / successCount : 0;
+        
+        // Method split
+        const vnpayTxs = successfulTransactions.filter(t => t.paymentMethod === 'VNPAY' || t.bankCode);
+        const cashTxs = successfulTransactions.filter(t => !t.bankCode && (!t.paymentMethod || t.paymentMethod === 'CASH'));
+        const vnpayTotal = vnpayTxs.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+        const cashTotal = cashTxs.reduce((sum, t) => sum + Number(t.amount ?? 0), 0);
+
+        return {
+            successCount,
+            totalPaid,
+            successRate,
+            avgTicket,
+            vnpayCount: vnpayTxs.length,
+            cashCount: cashTxs.length,
+            vnpayTotal,
+            cashTotal,
+        };
+    }, [successfulTransactions, transactionsInRange]);
+
+    // ========== END PAYMENT-BASED ANALYTICS ==========
 
     // Reset filters to the default current-month view
     const handleResetFilters = async () => {
@@ -492,9 +584,26 @@ const DichVuTK: React.FC = () => {
     const [dentistTopN, setDentistTopN] = useState<number>(0); // 0 = all, otherwise top N
 
     // Prepare dentist chart data (counts + revenue) and table data
+    // Use payment-based revenue when available, fallback to price estimates
     const dentistChartData = (dentistStats && dentistStats.length > 0)
-        ? dentistStats.map(d => ({ name: d.dentistName, total: d.totalAppointments, revenue: typeof (d as unknown as { totalRevenue?: number }).totalRevenue === 'number' ? (d as unknown as { totalRevenue?: number }).totalRevenue : (dentistRevenue[d.dentistId] || 0) }))
-        : (allDentists && allDentists.length > 0 ? allDentists.map(d => ({ name: d.name, total: (dentistToAppointments[d.id] || []).length, revenue: dentistRevenue[d.id] || 0 })) : Object.keys(dentistToAppointments).map(k => ({ name: `Nha sĩ ${k}`, total: (dentistToAppointments[Number(k)] || []).length, revenue: dentistRevenue[Number(k)] || 0 })));
+        ? dentistStats.map(d => ({ 
+            name: d.dentistName, 
+            total: d.totalAppointments, 
+            revenue: typeof (d as unknown as { totalRevenue?: number }).totalRevenue === 'number' 
+                ? (d as unknown as { totalRevenue?: number }).totalRevenue 
+                : (dentistRevenueFromPayments[d.dentistId] || dentistRevenue[d.dentistId] || 0) 
+        }))
+        : (allDentists && allDentists.length > 0 
+            ? allDentists.map(d => ({ 
+                name: d.name, 
+                total: (dentistToAppointments[d.id] || []).length, 
+                revenue: dentistRevenueFromPayments[d.id] || dentistRevenue[d.id] || 0 
+            })) 
+            : Object.keys(dentistToAppointments).map(k => ({ 
+                name: `Nha sĩ ${k}`, 
+                total: (dentistToAppointments[Number(k)] || []).length, 
+                revenue: dentistRevenueFromPayments[Number(k)] || dentistRevenue[Number(k)] || 0 
+            })));
 
     interface DentistTableEntry {
         dentistId: number;
@@ -668,7 +777,7 @@ const DichVuTK: React.FC = () => {
             total: d.totalAppointments,
             revenue: (typeof (d as unknown as { totalRevenue?: number }).totalRevenue === 'number'
                 ? (d as unknown as { totalRevenue?: number }).totalRevenue
-                : (dentistRevenue[d.dentistId] || 0)) as number,
+                : (dentistRevenueFromPayments[d.dentistId] || dentistRevenue[d.dentistId] || 0)) as number,
             serviceCounts: (d.serviceCounts || {}) as Record<string, number>,
             phone: allDentists.find(a => a.id === d.dentistId)?.phone,
             email: allDentists.find(a => a.id === d.dentistId)?.email,
@@ -677,7 +786,7 @@ const DichVuTK: React.FC = () => {
             dentistId: d.id,
             name: d.name,
             total: (dentistToAppointments[d.id] || []).length,
-            revenue: dentistRevenue[d.id] || 0,
+            revenue: dentistRevenueFromPayments[d.id] || dentistRevenue[d.id] || 0,
             serviceCounts: computeServiceCounts(dentistToAppointments[d.id] || []),
             phone: d.phone,
             email: d.email
@@ -1193,7 +1302,8 @@ const DichVuTK: React.FC = () => {
 
     // Tính toán các chỉ số tổng quan
     const totalBookings = pieChartData.reduce((sum, data) => sum + data.count, 0);
-    const totalRevenue = pieChartData.reduce((sum, data) => sum + data.totalPrice, 0);
+    // Use actual payment revenue if available, fallback to estimated service revenue
+    const totalRevenue = paymentMetrics.totalPaid > 0 ? paymentMetrics.totalPaid : pieChartData.reduce((sum, data) => sum + data.totalPrice, 0);
     const totalServices = Object.keys(serviceUsage).length;
 
     // Color palette for services
@@ -1501,6 +1611,109 @@ const DichVuTK: React.FC = () => {
                                 </Card>
                             </motion.div>
                         )}
+
+                        {/* Daily Revenue Trend from Payments */}
+                        {dailyRevenueTrend && dailyRevenueTrend.length > 0 && (
+                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="mb-8">
+                                <Card className="shadow-lg">
+                                    <CardContent className="p-6">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <Typography variant="h6" className="font-bold text-gray-800">
+                                                Xu Hướng Doanh Thu Theo Ngày
+                                            </Typography>
+                                            <Chip 
+                                                label={`${successfulTransactions.length} giao dịch thành công`} 
+                                                color="success" 
+                                                size="small" 
+                                            />
+                                        </div>
+                                        <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div className="p-3 bg-gradient-to-r from-green-50 to-green-100 rounded-lg">
+                                                <Typography variant="body2" className="text-gray-600">Tổng thanh toán</Typography>
+                                                <Typography variant="h6" className="font-bold text-green-700">
+                                                    {paymentMetrics.totalPaid.toLocaleString('vi-VN')} đ
+                                                </Typography>
+                                            </div>
+                                            <div className="p-3 bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg">
+                                                <Typography variant="body2" className="text-gray-600">Tỉ lệ thành công</Typography>
+                                                <Typography variant="h6" className="font-bold text-blue-700">
+                                                    {paymentMetrics.successRate.toFixed(1)}%
+                                                </Typography>
+                                            </div>
+                                            <div className="p-3 bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg">
+                                                <Typography variant="body2" className="text-gray-600">Giá trị trung bình</Typography>
+                                                <Typography variant="h6" className="font-bold text-purple-700">
+                                                    {paymentMetrics.avgTicket.toLocaleString('vi-VN')} đ
+                                                </Typography>
+                                            </div>
+                                        </div>
+                                        <div style={{ width: '100%', height: 350 }}>
+                                            <ResponsiveContainer width="100%" height={350}>
+                                                <ComposedChart 
+                                                    data={dailyRevenueTrend} 
+                                                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                                                >
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                                    <XAxis 
+                                                        dataKey="date" 
+                                                        angle={-45} 
+                                                        textAnchor="end" 
+                                                        height={60} 
+                                                        tick={{ fontSize: 11 }}
+                                                    />
+                                                    <YAxis 
+                                                        tick={{ fontSize: 12 }}
+                                                        tickFormatter={(val) => `${(val / 1000000).toFixed(1)}M`}
+                                                    />
+                                                    <Tooltip 
+                                                        formatter={(value: number) => [
+                                                            `${value.toLocaleString('vi-VN')} đ`,
+                                                            'Doanh thu'
+                                                        ]}
+                                                        labelFormatter={(label) => `Ngày: ${label}`}
+                                                        cursor={{ fill: 'rgba(0,0,0,0.05)' }}
+                                                    />
+                                                    <Legend />
+                                                    <Bar 
+                                                        dataKey="revenue" 
+                                                        name="Doanh thu" 
+                                                        fill="#667eea" 
+                                                        opacity={0.3}
+                                                        radius={[8, 8, 0, 0]}
+                                                    />
+                                                    <Line 
+                                                        type="monotone" 
+                                                        dataKey="revenue" 
+                                                        name="Xu hướng" 
+                                                        stroke="#667eea" 
+                                                        strokeWidth={3}
+                                                        dot={{ fill: '#667eea', r: 4 }}
+                                                        activeDot={{ r: 6 }}
+                                                    />
+                                                </ComposedChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <Typography variant="body2" className="text-gray-600 mb-2">Thanh toán VNPAY</Typography>
+                                                    <Typography variant="body1" className="font-semibold text-gray-800">
+                                                        {paymentMetrics.vnpayCount} giao dịch ({paymentMetrics.vnpayTotal.toLocaleString('vi-VN')} đ)
+                                                    </Typography>
+                                                </div>
+                                                <div>
+                                                    <Typography variant="body2" className="text-gray-600 mb-2">Thanh toán tiền mặt</Typography>
+                                                    <Typography variant="body1" className="font-semibold text-gray-800">
+                                                        {paymentMetrics.cashCount} giao dịch ({paymentMetrics.cashTotal.toLocaleString('vi-VN')} đ)
+                                                    </Typography>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
+
                         <div className="mb-8">
                             <Card className="shadow-lg">
                                 <CardContent className="p-6">

@@ -7,15 +7,45 @@ export interface PrescriptionDrug {
   drugName?: string;
   quantity: number;
   note?: string;
+  // New fields from response
+  drugPrice?: number;
+  lineTotal?: number;
+  priceUnit?: string;
 }
 
 export interface Prescription {
   id: number;
-  appointmentId: number;
-  patientId: number;
-  patientName: string;
+  appointmentId?: number;
+  // Nested patient object from response
+  patient?: {
+    id?: number;
+    fullName?: string;
+    username?: string;
+    email?: string;
+  };
+  // Nested doctor object from response
+  doctor?: {
+    id?: number;
+    name?: string;
+    email?: string;
+  };
+  // Nested appointment object from response
+  appointment?: {
+    id?: number;
+    serviceId?: number;
+    serviceName?: string | null;
+    servicePrice?: number | null;
+    serviceTotalPrice?: number | null;
+    serviceDurationMinutes?: number | null;
+    serviceDiscountPercent?: number | null;
+    scheduledTime?: string;
+    status?: string;
+  };
+  // Legacy flat fields (for backward compatibility)
+  patientId?: number;
+  patientName?: string;
   patientEmail?: string;
-  doctorId: number;
+  doctorId?: number;
   doctorUserId?: number;
   doctorName?: string;
   doctorEmail?: string;
@@ -23,11 +53,11 @@ export interface Prescription {
   createdAt?: string;
   note?: string;
   drugs: PrescriptionDrug[];
-  // new financial fields
+  // financial fields
   totalAmount?: number;
   discountAmount?: number;
-  discountPercent?: number;
-  discountId?: number;
+  discountPercent?: number | null;
+  discountId?: number | null;
   discountCode?: string;
   finalAmount?: number;
 }

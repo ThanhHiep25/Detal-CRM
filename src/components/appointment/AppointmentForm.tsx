@@ -13,6 +13,7 @@ import { BranchAPI, type Branch } from '../../services/branches';
 import { ServiceAPI, type ServiceItem } from '../../services/service';
 import { AppointmentAPI } from '../../services/appointments.ts';
 import type { CreateAppointmentPayload } from '../../services/appointments.ts';
+import { AvailableTimeSlots } from './AvailableTimeSlots';
 
 // Định nghĩa style chi tiết hơn cho input
 const inputStyles = {
@@ -277,7 +278,7 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
     if (!custEmail.trim() && !custPhone.trim()) { toast.error('Nhập email hoặc số điện thoại'); return; }
     // Validation: name (no special chars), phone (starts with 0 and 10 digits), email (@gmail.com)
     try {
-      const nameRegex = new RegExp('^[\\p{L}\\s]+$','u');
+      const nameRegex = new RegExp('^[\\p{L}\\s]+$', 'u');
       if (!nameRegex.test(custFullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
     } catch {
       const fallbackName = /^[A-Za-z\s.-]+$/;
@@ -497,7 +498,16 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
               <TextField fullWidth label="Giờ dự kiến" type="time" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />
             </Grid>
 
-
+            {/* Khung giờ trống của nha sĩ - Tab Tư Vấn */}
+            <Grid item xs={12}>
+              <AvailableTimeSlots
+                dentistId={typeof dentistId === 'number' ? dentistId : undefined}
+                date={scheduledDate}
+                dentistName={dentists.find(d => d.id === dentistId)?.name}
+                selectedTime={scheduledTime}
+                onSelectTime={(time) => setScheduledTime(time)}
+              />
+            </Grid>
 
             <Grid item xs={12}><TextField fullWidth label="Nội dung lịch hẹn" multiline rows={4} placeholder="eg. nội dung" InputLabelProps={{ shrink: true }} variant="filled" sx={inputStyles} value={appointmentContent} onChange={(e) => setAppointmentContent(e.target.value)} /></Grid>
 
@@ -565,9 +575,11 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
             <Grid item xs={12} md={4}>
               <TextField fullWidth label="Ngày" type="date" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
             </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField fullWidth label="Thời gian" type="time" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />
-            </Grid>
+
+
+            {/* <Grid item xs={12} md={4}>
+              <TextField fullWidth label="Thời gian"  type="time" variant="filled" sx={inputStyles} InputLabelProps={{ shrink: true }} value={scheduledTime} onChange={(e) => setScheduledTime(e.target.value)} />
+            </Grid> */}
             <Grid item xs={12} md={4}>
               <FormControl fullWidth variant="filled" sx={inputStyles}>
                 <InputLabel shrink>Bác sĩ</InputLabel>
@@ -596,14 +608,24 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
               </FormControl>
             </Grid>
 
-               <Grid item xs={12} md={8}>
+            {/* Khung giờ trống của nha sĩ - Tab Điều Trị */}
+            <Grid item xs={12}>
+              <AvailableTimeSlots
+                dentistId={typeof dentistId === 'number' ? dentistId : undefined}
+                date={scheduledDate}
+                dentistName={dentists.find(d => d.id === dentistId)?.name}
+                selectedTime={scheduledTime}
+                onSelectTime={(time) => setScheduledTime(time)}
+              />
+            </Grid>
+            <Grid item xs={12} md={12}>
               <FormControl fullWidth variant="filled" sx={inputStyles}>
                 <InputLabel shrink>Chi nhánh</InputLabel>
                 <Select displayEmpty value={branchId} onChange={(e) => {
-                    const v = e.target.value as unknown;
-                    const n = typeof v === 'string' ? parseInt(v, 10) : (v as number);
-                    setBranchId(Number.isNaN(n) ? '' : n);
-                  }}>
+                  const v = e.target.value as unknown;
+                  const n = typeof v === 'string' ? parseInt(v, 10) : (v as number);
+                  setBranchId(Number.isNaN(n) ? '' : n);
+                }}>
                   <MenuItem value=""><em>{dentistsLoading ? 'Đang tải...' : 'Chọn chi nhánh'}</em></MenuItem>
                   {branches.map(b => <MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>)}
                 </Select>
@@ -623,7 +645,7 @@ export function AppointmentForm(props?: { dentistId?: number | ''; setDentistId?
                 if (!scheduledDate) { toast.error('Chọn ngày dự kiến'); return; }
                 // Validation: name (no special chars), phone (starts with 0 and 10 digits), email (@gmail.com)
                 try {
-                  const nameRegex = new RegExp('^[\\p{L}\\s]+$','u');
+                  const nameRegex = new RegExp('^[\\p{L}\\s]+$', 'u');
                   if (!nameRegex.test(custFullName.trim())) { toast.error('Tên không được chứa ký tự đặc biệt'); return; }
                 } catch {
                   const fallbackName = /^[A-Za-z\s.-]+$/;

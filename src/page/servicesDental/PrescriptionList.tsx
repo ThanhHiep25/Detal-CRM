@@ -45,11 +45,13 @@ export default function PrescriptionListPage() {
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
   const isSm = useMediaQuery(theme.breakpoints.down('md'));
   const [loading, setLoading] = useState(false);
+  const [loadingDrugs, setLoadingDrugs] = useState(false);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
-  const [drugsMap, setDrugsMap] = useState<Record<number, DrugItem>>({});
+  const [drugsList, setDrugsList] = useState<DrugItem[]>([]);
   const [filterDate, setFilterDate] = useState<Date | null>(null);
   const [selectionModel, setSelectionModel] = useState<GridRowSelectionModel>([]);
   const [searchText, setSearchText] = useState('');
+
   // shared loader used across actions
   const loadData = async () => {
     setLoading(true);
@@ -60,17 +62,6 @@ export default function PrescriptionListPage() {
         setPrescriptions([]);
         toast.error(pRes?.message || 'Không tải được danh sách đơn');
       }
-      // load drugs price map
-      try {
-        const dRes = await DrugAPI.getDrugs();
-        if (dRes && dRes.success) {
-          const map: Record<number, DrugItem> = {};
-          (dRes.data || []).forEach((di) => { map[di.id] = di; });
-          setDrugsMap(map);
-        }
-      } catch {
-        // ignore drug load errors (optional)
-      }
     } catch {
       toast.error('Lỗi khi tải dữ liệu');
       setPrescriptions([]);
@@ -79,7 +70,20 @@ export default function PrescriptionListPage() {
     }
   };
 
-  useEffect(() => { void loadData(); }, []);
+  const loadDrugs = async () => {
+    setLoadingDrugs(true);
+    try {
+      const dRes = await DrugAPI.getDrugs();
+      if (dRes && dRes.success) setDrugsList(dRes.data || []);
+      else setDrugsList([]);
+    } catch {
+      setDrugsList([]);
+    } finally {
+      setLoadingDrugs(false);
+    }
+  };
+
+  useEffect(() => { void loadData(); void loadDrugs(); }, []);
 
   // watch container size changes (e.g. sidebar collapse/expand) and trigger a window
   // resize event so DataGrid can recompute column widths. Debounced to avoid churn.
@@ -101,21 +105,36 @@ export default function PrescriptionListPage() {
   const filtered = prescriptions.filter(p => {
     if (!searchText) return true;
     const q = searchText.trim().toLowerCase();
+    // Hỗ trợ cả nested patient/doctor objects và flat fields
+    const patientName = p.patient?.fullName || p.patient?.username || p.patientName || '';
+    const doctorName = p.doctor?.name || p.doctorName || '';
     return (
       String(p.id).includes(q) ||
-      (p.patientName || '').toLowerCase().includes(q) ||
-      (p.doctorName || '').toLowerCase().includes(q) ||
+      patientName.toLowerCase().includes(q) ||
+      doctorName.toLowerCase().includes(q) ||
       (p.discountCode || '').toLowerCase().includes(q)
     );
   });
 
-  // apply date filter (by createdAt date) if set
-  const filteredWithDate = filtered.filter(p => {
-    if (!filterDate) return true;
-    if (!p.createdAt) return false;
-    const d = new Date(p.createdAt);
-    return d.getFullYear() === filterDate.getFullYear() && d.getMonth() === filterDate.getMonth() && d.getDate() === filterDate.getDate();
-  });
+  // apply date filter (by createdAt date) if set, then sort newest first
+  const filteredWithDate = filtered
+    .filter(p => {
+      if (!filterDate) return true;
+      if (!p.createdAt) return false;
+      const d = new Date(p.createdAt);
+      return (
+        d.getFullYear() === filterDate.getFullYear() &&
+        d.getMonth() === filterDate.getMonth() &&
+        d.getDate() === filterDate.getDate()
+      );
+    })
+    .sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (tb !== ta) return tb - ta; // newest first
+      // tie-breaker by id desc if dates are equal or missing
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
 
   // appointment filter removed — using date picker instead
 
@@ -131,8 +150,9 @@ export default function PrescriptionListPage() {
 
   const rows: GridRow[] = filteredWithDate.map(p => ({
     id: p.id,
-    patient: p.patientName || '',
-    doctorName: p.doctorName || '',
+    // Lấy từ nested patient/doctor objects, fallback sang flat fields
+    patient: p.patient?.fullName || p.patient?.username || p.patientName || '',
+    doctorName: p.doctor?.name || p.doctorName || '',
     totalFormatted: `${(p.totalAmount ?? 0).toLocaleString('vi-VN')} đ`,
     discountLabel: p.discountPercent != null ? `${p.discountPercent}%` : (p.discountAmount && p.discountAmount > 0 ? `${p.discountAmount.toLocaleString('vi-VN')} đ` : '-'),
     finalAmountFormatted: `${(p.finalAmount ?? 0).toLocaleString('vi-VN')} đ`,
@@ -144,11 +164,18 @@ export default function PrescriptionListPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selected, setSelected] = useState<Prescription | null>(null);
+  const [originalSelected, setOriginalSelected] = useState<Prescription | null>(null);
   const [drugToAdd, setDrugToAdd] = useState<DrugItem | null>(null);
-
 
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Detect if prescription has changes
+  const hasChanges = selected && originalSelected ? 
+    JSON.stringify(selected) !== JSON.stringify(originalSelected) 
+    : false;
 
   const printInvoice = (pres: Prescription) => {
     const html = buildWrappedInvoiceHtml(pres);
@@ -345,12 +372,10 @@ export default function PrescriptionListPage() {
   // Helper to build invoice inner content (used for printing, PDF export)
   const buildInvoiceContentHtml = (pres: Prescription) => {
     const rowsHtml = (pres.drugs || []).map(d => {
-      const unitFromDrug = drugsMap[d.drugId]?.price ?? (drugsMap[d.drugId]?.priceUnit ? Number(drugsMap[d.drugId]?.price) : undefined);
-      // fallback to fields on prescription drug if needed
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const unit = Number(unitFromDrug ?? (d as any).price ?? (d as any).unitPrice ?? 0);
+      // Dùng drugPrice từ response API (snapshot giá)
+      const unit = Number(d.drugPrice ?? 0);
       const qty = d.quantity ?? 1;
-      const line = unit * qty;
+      const line = Number(d.lineTotal ?? unit * qty);
       return `<tr><td style="padding:8px;border-bottom:1px solid #eee">${d.drugName}${d.note ? ` — ${d.note}` : ''}</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${qty}</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:right">${unit.toLocaleString('vi-VN')} đ</td><td style="padding:8px;border-bottom:1px solid #eee;text-align:right">${line.toLocaleString('vi-VN')} đ</td></tr>`;
     }).join('');
 
@@ -381,12 +406,12 @@ export default function PrescriptionListPage() {
         <div style="display:flex;justify-content:space-between;margin-bottom:12px">
           <div>
             <div style="font-size:13px;font-weight:600">Bệnh nhân</div>
-            <div style="font-size:13px">${pres.patientName || ''}</div>
+            <div style="font-size:13px">${pres.patient?.fullName || pres.patient?.username || pres.patientName || ''}</div>
             <div style="font-size:12px;color:#555">${patientContact}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:13px;font-weight:600">Bác sĩ</div>
-            <div style="font-size:13px">${pres.doctorName || ''}</div>
+            <div style="font-size:13px">${pres.doctor?.name || pres.doctorName || ''}</div>
           </div>
         </div>
 
@@ -419,13 +444,13 @@ export default function PrescriptionListPage() {
             <div style="font-size:13px;color:#444">Bệnh nhân:</div>
             <div style="font-style:italic;color:#666;margin-bottom:6px">(Chữ ký xác nhận)</div>
             <div style="height:60px"></div>
-            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${pres.patientName || ''}</div>
+            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${pres.patient?.fullName || pres.patient?.username || pres.patientName || ''}</div>
           </div>
           <div style="width:48%; text-align:right">
             <div style="font-size:13px;color:#444">Bác sĩ kê đơn / điều trị</div>
             <div style="font-style:italic;color:#666;margin-bottom:6px">(Chữ ký xác nhận)</div>
             <div style="height:60px"></div>
-            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${pres.doctorName || ''}</div>
+            <div style="border-top:1px solid #000; display:inline-block; padding-top:6px">${pres.doctor?.name || pres.doctorName || ''}</div>
           </div>
         </div>
       </div>
@@ -509,13 +534,26 @@ export default function PrescriptionListPage() {
                   const pres = prescriptions.find(p => p.id === id) || null;
                   return (
                     <>
-                      <IconButton size="small" onClick={() => { setSelected(pres ? JSON.parse(JSON.stringify(pres)) : null); setViewOpen(true); }} title="Xem">
+                      <IconButton size="small" onClick={() => { 
+                        const copy = pres ? JSON.parse(JSON.stringify(pres)) : null;
+                        setSelected(copy); 
+                        setViewOpen(true); 
+                      }} title="Xem">
                         <VisibilityIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => { setSelected(pres ? JSON.parse(JSON.stringify(pres)) : null); setEditOpen(true); }} title="Sửa">
+                      <IconButton size="small" onClick={() => { 
+                        const copy = pres ? JSON.parse(JSON.stringify(pres)) : null;
+                        setSelected(copy);
+                        setOriginalSelected(copy);
+                        setEditOpen(true); 
+                      }} title="Sửa">
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => { setSelected(pres ? JSON.parse(JSON.stringify(pres)) : null); setDeleteConfirmOpen(true); }} title="Xóa">
+                      <IconButton size="small" onClick={() => { 
+                        const copy = pres ? JSON.parse(JSON.stringify(pres)) : null;
+                        setSelected(copy); 
+                        setDeleteConfirmOpen(true); 
+                      }} title="Xóa">
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </>
@@ -574,13 +612,13 @@ export default function PrescriptionListPage() {
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2">Bệnh nhân</Typography>
-                  <Typography>{selected.patientName}</Typography>
+                  <Typography>{selected.patient?.fullName || selected.patient?.username || selected.patientName || ''}</Typography>
                   {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  <Typography variant="body2">{(selected as any).patientPhone || selected.patientEmail || ''}</Typography>
+                  <Typography variant="body2">{selected.patient?.email || (selected as any).patientPhone || selected.patientEmail || ''}</Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2">Bác sĩ</Typography>
-                  <Typography>{selected.doctorName}</Typography>
+                  <Typography>{selected.doctor?.name || selected.doctorName || ''}</Typography>
                 </Grid>
               </Grid>
 
@@ -595,12 +633,10 @@ export default function PrescriptionListPage() {
                 </TableHead>
                 <TableBody>
                   {(selected.drugs || []).map(d => {
-                    // prefer drugsMap price, otherwise fallback to prescription drug fields
-                    const unitFromDrug = drugsMap[d.drugId]?.price ?? (drugsMap[d.drugId]?.priceUnit ? Number(drugsMap[d.drugId]?.price) : undefined);
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const unit = Number(unitFromDrug ?? (d as any).price ?? (d as any).unitPrice ?? 0);
+                    // Dùng drugPrice từ response API (snapshot giá)
+                    const unit = Number(d.drugPrice ?? 0);
                     const qty = d.quantity ?? 1;
-                    const line = unit * qty;
+                    const line = Number(d.lineTotal ?? unit * qty);
                     return (
                       <TableRow key={d.id}>
                         <TableCell>{d.drugName}{d.note ? ` — ${d.note}` : ''}</TableCell>
@@ -632,12 +668,21 @@ export default function PrescriptionListPage() {
           ) : null}
         </DialogContent>
         <DialogActions>
-          <Button startIcon={<PrintIcon />} onClick={() => selected && printInvoice(selected)}>In</Button>
-
-          <Button startIcon={<PictureAsPdfIcon />} disabled={exportingPdf} onClick={() => selected && exportInvoicePdf(selected)}>
+          <Button 
+            startIcon={<PrintIcon />} 
+            onClick={() => selected && printInvoice(selected)}
+            disabled={exportingPdf}
+          >
+            In
+          </Button>
+          <Button 
+            startIcon={<PictureAsPdfIcon />} 
+            disabled={exportingPdf} 
+            onClick={() => selected && exportInvoicePdf(selected)}
+          >
             {exportingPdf ? <CircularProgress size={18} /> : 'Xuất PDF'}
           </Button>
-          <Button onClick={() => setViewOpen(false)}>Đóng</Button>
+          <Button onClick={() => { setViewOpen(false); }}>Đóng</Button>
         </DialogActions>
       </Dialog>
 
@@ -647,6 +692,24 @@ export default function PrescriptionListPage() {
         <DialogContent dividers>
           {selected ? (
             <Stack spacing={2} sx={{ mt: 1 }}>
+              {/* Display read-only patient/doctor info */}
+              <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: '#666' }}>Bệnh nhân</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {selected.patient?.fullName || selected.patient?.username || selected.patientName || '-'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="caption" sx={{ color: '#666' }}>Bác sĩ</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {selected.doctor?.name || selected.doctorName || '-'}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+
               <div>
                 <Typography variant="subtitle2">Danh sách thuốc</Typography>
                 <Table size="small">
@@ -661,9 +724,8 @@ export default function PrescriptionListPage() {
                   </TableHead>
                   <TableBody>
                     {(selected.drugs || []).map(d => {
-                      const unitFromDrug = drugsMap[d.drugId]?.price ?? (drugsMap[d.drugId]?.priceUnit ? Number(drugsMap[d.drugId]?.price) : undefined);
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      const unit = Number(unitFromDrug ?? (d as any).price ?? (d as any).unitPrice ?? 0);
+                      // Dùng drugPrice từ response API (snapshot giá)
+                      const unit = Number(d.drugPrice ?? 0);
                       const qty = d.quantity ?? 1;
                       const line = unit * qty;
                       return (
@@ -681,9 +743,7 @@ export default function PrescriptionListPage() {
                                 const updated = { ...selected, drugs: newDrugs } as Prescription;
                                 // recalc totals
                                 const subtotal = newDrugs.reduce((s, it) => {
-                                  const unitFrom = drugsMap[it.drugId]?.price ?? (drugsMap[it.drugId]?.priceUnit ? Number(drugsMap[it.drugId]?.price) : undefined);
-                                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                  const u = Number(unitFrom ?? (it as any).price ?? (it as any).unitPrice ?? 0);
+                                const u = Number(it.drugPrice ?? 0);
                                   return s + (u * (it.quantity ?? 0));
                                 }, 0);
                                 const final = updated.discountPercent != null ? Math.round(subtotal * (1 - (updated.discountPercent ?? 0) / 100)) : subtotal - (updated.discountAmount ?? 0);
@@ -700,9 +760,7 @@ export default function PrescriptionListPage() {
                               const newDrugs = (selected.drugs || []).filter(dd => dd !== d);
                               const updated = { ...selected, drugs: newDrugs } as Prescription;
                               const subtotal = newDrugs.reduce((s, it) => {
-                                const unitFrom = drugsMap[it.drugId]?.price ?? (drugsMap[it.drugId]?.priceUnit ? Number(drugsMap[it.drugId]?.price) : undefined);
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                const u = Number(unitFrom ?? (it as any).price ?? (it as any).unitPrice ?? 0);
+                                const u = Number(it.drugPrice ?? 0);
                                 return s + (u * (it.quantity ?? 0));
                               }, 0);
                               const final = updated.discountPercent != null ? Math.round(subtotal * (1 - (updated.discountPercent ?? 0) / 100)) : subtotal - (updated.discountAmount ?? 0);
@@ -720,33 +778,56 @@ export default function PrescriptionListPage() {
                 </Table>
               </div>
 
-              {/* Autocomplete to add drug */}
+              {/* Autocomplete to add drug from API */}
               <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="center">
                 <Box sx={{ flex: 1 }}>
                   <Autocomplete
                     size="small"
-                    options={Object.values(drugsMap || {})}
-                    getOptionLabel={(opt) => opt.name || ''}
+                    options={drugsList}
+                    getOptionLabel={(opt) => {
+                      if (!opt || typeof opt === 'string') return '';
+                      return `${opt.name || ''} (${opt.price?.toLocaleString('vi-VN') ?? '?'} đ)`;
+                    }}
+                    isOptionEqualToValue={(opt, val) => opt?.id === val?.id}
                     value={drugToAdd}
                     onChange={(_, v) => setDrugToAdd(v || null)}
-                    renderInput={(params) => <TextField {...params} label="Thêm thuốc" />}
+                    renderInput={(params) => <TextField {...params} label="Chọn thuốc" placeholder="Tìm thuốc..." />}
                   />
                 </Box>
-                <Button startIcon={<AddIcon />} onClick={() => {
-                  if (!selected || !drugToAdd) return;
-                  const exists = (selected.drugs || []).find(d => d.drugId === drugToAdd.id);
+                <Button 
+                  startIcon={<AddIcon />} 
+                  disabled={loadingDrugs}
+                  onClick={() => {
+                  if (!selected || !drugToAdd || !drugToAdd.name) return;
+                  const drugPrice = Number(drugToAdd.price ?? 0);
+                  if (drugPrice <= 0) {
+                    toast.error('Thuốc này chưa có giá trong hệ thống');
+                    return;
+                  }
+                  // check if drug already exists (by name)
+                  const exists = (selected.drugs || []).find(d => d.drugName?.toLowerCase() === drugToAdd.name.toLowerCase());
                   let newDrugs;
                   if (exists) {
-                    newDrugs = (selected.drugs || []).map(d => d.drugId === drugToAdd.id ? { ...d, quantity: (d.quantity ?? 0) + 1 } : d);
+                    newDrugs = (selected.drugs || []).map(d => 
+                      d.drugName?.toLowerCase() === drugToAdd.name.toLowerCase() 
+                        ? { ...d, quantity: (d.quantity ?? 0) + 1, lineTotal: ((d.quantity ?? 0) + 1) * drugPrice } 
+                        : d
+                    );
                   } else {
-                    newDrugs = [...(selected.drugs || []), { drugId: drugToAdd.id, drugName: drugToAdd.name, quantity: 1 }];
+                    newDrugs = [...(selected.drugs || []), { 
+                      drugId: drugToAdd.id, 
+                      drugName: drugToAdd.name, 
+                      quantity: 1, 
+                      drugPrice: drugPrice, 
+                      lineTotal: drugPrice,
+                      priceUnit: drugToAdd.priceUnit || '',
+                      note: ''
+                    }];
                   }
                   const updated = { ...selected, drugs: newDrugs } as Prescription;
                   // recalc totals
                   const subtotal = newDrugs.reduce((s, it) => {
-                    const unitFrom = drugsMap[it.drugId]?.price ?? (drugsMap[it.drugId]?.priceUnit ? Number(drugsMap[it.drugId]?.price) : undefined);
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const u = Number(unitFrom ?? (it as any).price ?? (it as any).unitPrice ?? 0);
+                    const u = Number(it.drugPrice ?? 0);
                     return s + (u * (it.quantity ?? 0));
                   }, 0);
                   const final = updated.discountPercent != null ? Math.round(subtotal * (1 - (updated.discountPercent ?? 0) / 100)) : subtotal - (updated.discountAmount ?? 0);
@@ -763,19 +844,44 @@ export default function PrescriptionListPage() {
           ) : null}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditOpen(false)}>Hủy</Button>
-          <Button variant="contained" onClick={async () => {
+          <Button onClick={() => { setEditOpen(false); setOriginalSelected(null); }}>Hủy</Button>
+          <Button 
+            variant="contained" 
+            disabled={!hasChanges || editLoading}
+            onClick={async () => {
             if (!selected) return;
+            setEditLoading(true);
             try {
-              // merge with original prescription so we don't accidentally clear fields
-              const original = prescriptions.find(p => p.id === selected.id) || {} as Prescription;
-              const payload: Partial<Prescription> = { ...original, ...selected };
+              // Use originalSelected as the base to ensure we never lose patient/doctor info
+              const original = originalSelected || prescriptions.find(p => p.id === selected.id) || {} as Prescription;
+              
+              // Explicit merge: keep all original fields, then override only with selected fields
+              const payload: Partial<Prescription> = {
+                id: selected.id,
+                // Preserve patient info - use selected if it has changed, otherwise use original
+                patient: selected.patient && Object.keys(selected.patient).length > 0 ? selected.patient : original.patient,
+                patientName: selected.patientName || original.patientName,
+                // Preserve doctor info - use selected if it has changed, otherwise use original
+                doctor: selected.doctor && Object.keys(selected.doctor).length > 0 ? selected.doctor : original.doctor,
+                doctorName: selected.doctorName || original.doctorName,
+                // Allow editing these fields
+                drugs: selected.drugs,
+                totalAmount: selected.totalAmount,
+                discountAmount: selected.discountAmount,
+                discountPercent: selected.discountPercent,
+                discountCode: selected.discountCode,
+                finalAmount: selected.finalAmount,
+                note: selected.note,
+                appointmentId: selected.appointmentId || original.appointmentId,
+              };
+              
               console.debug('Updating prescription payload', { id: selected.id, payload });
               const res = await PrescriptionAPI.update(selected.id, payload);
               console.debug('Prescription update response', res);
               if (res && res.success) {
                 toast.success('Cập nhật thành công');
                 setEditOpen(false);
+                setOriginalSelected(null);
                 void loadData();
               } else {
                 toast.error(res?.message || 'Cập nhật thất bại');
@@ -783,8 +889,13 @@ export default function PrescriptionListPage() {
             } catch (err) {
               console.error(err);
               toast.error('Lỗi khi cập nhật');
+            } finally {
+              setEditLoading(false);
             }
-          }}>Lưu</Button>
+          }}>
+            {editLoading ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+            Lưu
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -796,8 +907,9 @@ export default function PrescriptionListPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteConfirmOpen(false)}>Hủy</Button>
-          <Button color="error" variant="contained" onClick={async () => {
+          <Button color="error" variant="contained" disabled={deleteLoading} onClick={async () => {
             if (!selected) return;
+            setDeleteLoading(true);
             try {
               const res = await PrescriptionAPI.delete(selected.id);
               if (res && res.success) {
@@ -809,6 +921,8 @@ export default function PrescriptionListPage() {
               }
             } catch {
               toast.error('Lỗi khi xóa');
+            } finally {
+              setDeleteLoading(false);
             }
           }}>Xóa</Button>
         </DialogActions>
